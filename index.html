@@ -336,7 +336,6 @@
     let selectMode = false;
     let selectedFiles = new Set();
 
-    // 背景变量（全局声明一次）
     let userBg = localStorage.getItem('userBg') || '';
     let userBgImage = localStorage.getItem('userBgImage') || '';
 
@@ -429,6 +428,7 @@
     async function moveToTrash(type, folder, sub, fileName) {
         await apiCall('/move-to-trash', 'POST', { scope: currentScope, type, folder, sub, fileName });
         await loadFS();
+        if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
     }
 
     function highlightText(text, query) {
@@ -526,6 +526,7 @@
         cli.style.background = '#dbeafe';
         if (selectMode) toggleSelectMode(false);
         renderFileView(folder, sub);
+        if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
     }
 
     async function setFolderPassword(name) {
@@ -616,11 +617,8 @@
             btn.innerHTML = '<i class="fas fa-download"></i> 下载';
         }
         document.querySelectorAll('.file-card').forEach(card => {
-            if (selectMode) {
-                card.classList.add('selectable');
-            } else {
-                card.classList.remove('selectable', 'selected');
-            }
+            if (selectMode) card.classList.add('selectable');
+            else card.classList.remove('selectable', 'selected');
         });
         selectedFiles.clear();
     }
@@ -677,6 +675,7 @@
                 delBtn.onclick = async e => {
                     e.stopPropagation();
                     if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
+                    if (selectedFiles.has(fileKey)) selectedFiles.delete(fileKey);
                     await moveToTrash('file', folder, sub, fileName);
                 };
                 card.appendChild(delBtn);
@@ -1219,6 +1218,10 @@
     document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
     document.getElementById('saveBgBtn').addEventListener('click', () => {
         const url = document.getElementById('bgImageUrl').value.trim();
+        if (url && !url.match(/^https?:\/\//)) {
+            showToast('请输入有效的 HTTP/HTTPS URL');
+            return;
+        }
         if (url) {
             userBgImage = url;
             userBg = '';
@@ -1288,7 +1291,11 @@
                 const restoreBtn = document.createElement('button');
                 restoreBtn.innerHTML = '<i class="fas fa-undo"></i>'; restoreBtn.title='恢复';
                 restoreBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--primary);font-size:1rem;';
-                restoreBtn.onclick = async () => { await apiCall('/restore-from-trash','POST',{scope: currentScope, index}); await loadFS(); renderTrash(); };
+                restoreBtn.onclick = async () => {
+                    await apiCall('/restore-from-trash','POST',{scope: currentScope, index});
+                    await loadFS();
+                    if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
+                };
                 const delBtn = document.createElement('button');
                 delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>'; delBtn.title='彻底删除';
                 delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;';
@@ -1296,7 +1303,7 @@
                     if (!confirm('永久删除不可恢复！')) return;
                     await apiCall('/permanent-delete','POST',{scope: currentScope, index});
                     await loadFS();
-                    renderTrash();
+                    if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
                 };
                 actions.appendChild(restoreBtn);
                 actions.appendChild(delBtn);
@@ -1321,7 +1328,7 @@
             await apiCall('/permanent-delete','POST',{scope: currentScope, index:i});
         }
         await loadFS();
-        renderTrash();
+        if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
     });
 
     function syncThemeUI() {
