@@ -159,7 +159,7 @@
         <div class="toolbar-left">
             <button class="sidebar-toggle" id="sidebarToggle"><i class="fas fa-bars"></i></button>
             <img id="avatarImg" class="avatar-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23ddd'/%3E%3C/svg%3E" title="个人主页" onclick="window._openProfile()" />
-            <button class="toolbar-btn" id="uploadBtn" onclick="window._uploadFile()"><i class="fas fa-upload"></i> 上传</button>
+            <button class="toolbar-btn" id="uploadBtn" onclick="window._triggerUpload()"><i class="fas fa-upload"></i> 上传</button>
             <button class="toolbar-btn outline" id="downloadBtn" onclick="window._downloadAction()"><i class="fas fa-download"></i> 下载</button>
             <button class="toolbar-btn outline" id="refreshBtn" onclick="window._refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
             <button class="toolbar-btn outline" id="trashBtn" onclick="window._toggleTrash()"><i class="fas fa-trash"></i> 回收站</button>
@@ -635,11 +635,10 @@
         fv.appendChild(h2);
         if (currentRole !== 'readonly') {
             const addBtn = document.createElement('button');
-            addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
-            addBtn.onclick = () => {
-                if (!currentSelection) return showToast('请先在左侧选择一个子分类');
-                document.getElementById('hiddenFileInput').click();
-            };
+            addBtn.className = 'toolbar-btn';
+            addBtn.style.marginBottom = '1rem';
+            addBtn.textContent = '+ 上传文件';
+            addBtn.setAttribute('onclick', 'window._triggerUpload()');
             fv.appendChild(addBtn);
         }
         if (!child.files.length) {
@@ -1053,12 +1052,12 @@
     document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
     document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
 
-    // 暴露全局函数给 onclick 调用
+    // 全局函数
     window._openSettings = () => {
         document.getElementById('settingsModal').classList.add('open');
         updateSettingsThemeIcon();
     };
-    window._uploadFile = () => {
+    window._triggerUpload = () => {
         if (!currentSelection) return showToast('请先在左侧选择一个子分类');
         document.getElementById('hiddenFileInput').click();
     };
