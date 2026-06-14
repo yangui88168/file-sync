@@ -1333,7 +1333,8 @@
 
     function syncThemeUI() {
         const isDark = document.body.classList.contains('dark');
-        document.getElementById('themeToggleSettings').innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        const themeToggle = document.getElementById('themeToggleSettings');
+        if (themeToggle) themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
     }
 
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
