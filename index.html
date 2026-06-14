@@ -334,9 +334,7 @@
                 if (res.status === 401) { logout(); throw new Error('登录已过期'); }
                 const data = await res.json();
                 if (!res.ok) {
-                    if (data.remaining !== undefined) {
-                        throw new Error(`${data.error}（剩余尝试次数：${data.remaining}）`);
-                    }
+                    if (data.remaining !== undefined) throw new Error(`${data.error}（剩余尝试次数：${data.remaining}）`);
                     throw new Error(data.error || `请求失败(${res.status})`);
                 }
                 return data;
@@ -359,7 +357,6 @@
         document.getElementById('loginStep1').classList.remove('hidden');
         document.getElementById('loginStep2').classList.add('hidden');
     }
-
     function updateUIByRole() {
         const isReadOnly = currentRole === 'readonly';
         document.getElementById('uploadBtn').disabled = isReadOnly;
@@ -412,39 +409,29 @@
             const div = document.createElement('div');
             div.className = 'folder-item';
             const locked = folder.passwordHash && !unlockedFolders[folder.id];
-            const chevron = document.createElement('i');
-            chevron.className = 'fas fa-chevron-right';
-            chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
-            const nameSpan = document.createElement('span');
-            nameSpan.style.flex = '1';
+            const chevron = document.createElement('i'); chevron.className = 'fas fa-chevron-right'; chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
+            const nameSpan = document.createElement('span'); nameSpan.style.flex = '1';
             const icon = document.createElement('i');
             icon.className = locked ? 'fas fa-lock' : 'fas fa-folder';
             icon.style.cssText = `margin-right:6px;color:${locked ? '#f59e0b' : (currentScope === 'public' ? '#2563eb' : '#8b5cf6')};`;
             nameSpan.appendChild(icon);
             nameSpan.innerHTML += highlightText(folder.name, query);
-            const actions = document.createElement('div');
-            actions.className = 'folder-actions';
+            const actions = document.createElement('div'); actions.className = 'folder-actions';
             if (currentRole !== 'readonly') {
                 [['fa-key','密码'],['fa-edit','重命名'],['fa-trash-alt','删除']].forEach(([ic,title],idx)=>{
-                    const btn = document.createElement('button');
-                    btn.title = title;
-                    btn.innerHTML = `<i class="fas ${ic}"></i>`;
+                    const btn = document.createElement('button'); btn.title = title; btn.innerHTML = `<i class="fas ${ic}"></i>`;
                     btn.onclick = e => { e.stopPropagation(); idx===0?setFolderPassword(folder.id):idx===1?renameFolder(folder.id, folder.name):deleteFolder(folder.id, folder.name); };
                     actions.appendChild(btn);
                 });
             }
             div.appendChild(chevron); div.appendChild(nameSpan); div.appendChild(actions);
-            const sub = document.createElement('ul');
-            sub.className = 'sub-tree';
+            const sub = document.createElement('ul'); sub.className = 'sub-tree';
             if (!locked && folder.children) {
                 folder.children.forEach(child => {
-                    const cli = document.createElement('li');
-                    cli.className = 'sub-item';
-                    const sn = document.createElement('span');
-                    sn.style.flex='1';
+                    const cli = document.createElement('li'); cli.className = 'sub-item';
+                    const sn = document.createElement('span'); sn.style.flex='1';
                     sn.innerHTML = '<i class="fas fa-folder-open" style="margin-right:6px;color:#64748b;font-size:0.85rem;"></i>' + highlightText(child.name, query);
-                    const sa = document.createElement('div');
-                    sa.className='sub-item-actions';
+                    const sa = document.createElement('div'); sa.className='sub-item-actions';
                     if (currentRole !== 'readonly') {
                         const rb = document.createElement('button'); rb.innerHTML='<i class="fas fa-edit"></i>';
                         rb.onclick = e => { e.stopPropagation(); renameSub(folder.id, child.id, child.name); };
@@ -457,9 +444,7 @@
                     sub.appendChild(cli);
                 });
                 if (currentRole !== 'readonly') {
-                    const addBtn = document.createElement('button');
-                    addBtn.className='add-sub-btn';
-                    addBtn.innerHTML='<i class="fas fa-plus"></i> 新建子分类';
+                    const addBtn = document.createElement('button'); addBtn.className='add-sub-btn'; addBtn.innerHTML='<i class="fas fa-plus"></i> 新建子分类';
                     addBtn.onclick = e => { e.stopPropagation(); addSubFolder(folder.id); };
                     sub.appendChild(addBtn);
                 }
@@ -471,14 +456,9 @@
                     if (pwd === null) return;
                     try {
                         await apiCall('/verify-folder-password', 'POST', { scope: currentScope, folderId: folder.id, password: pwd });
-                        unlockedFolders[folder.id] = true;
-                        persistUnlocked();
-                        renderTree();
+                        unlockedFolders[folder.id] = true; persistUnlocked(); renderTree();
                     } catch { showToast('密码错误'); }
-                } else {
-                    sub.classList.toggle('show');
-                    chevron.classList.toggle('fa-rotate-90');
-                }
+                } else { sub.classList.toggle('show'); chevron.classList.toggle('fa-rotate-90'); }
             };
             li.appendChild(div); li.appendChild(sub); tree.appendChild(li);
         });
@@ -493,20 +473,264 @@
         if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
     }
 
-    async function setFolderPassword(folderId) { /* ... 使用 folderId 调用后端 */ }
-    async function renameFolder(folderId, oldName) { /* ... 使用 folderId */ }
-    async function deleteFolder(folderId, name) { /* ... 使用 folderId */ }
-    async function renameSub(folderId, subId, oldName) { /* ... 使用 folderId, subId */ }
-    async function deleteSub(folderId, subId, name) { /* ... 使用 folderId, subId */ }
-    async function addSubFolder(folderId) { /* ... 使用 folderId */ }
+    async function setFolderPassword(folderId) {
+        const newPwd = prompt(`设置密码（留空=清除）：`);
+        if (newPwd === null) return;
+        try {
+            await apiCall('/set-folder-password', 'POST', { scope: currentScope, folderId, password: newPwd });
+            if (newPwd) { delete unlockedFolders[folderId]; } else { unlockedFolders[folderId] = true; }
+            persistUnlocked();
+            renderTree();
+            showToast(newPwd ? '密码已设置！' : '密码已清除！');
+        } catch(e) { showToast(e.message); }
+    }
+    async function renameFolder(folderId, oldName) {
+        if (currentRole === 'readonly') return showToast('只读账户无法重命名');
+        const newName = prompt('新文件夹名称：', oldName);
+        if (!newName || !validName(newName)) return;
+        try {
+            await apiCall('/rename-folder', 'POST', { scope: currentScope, folderId, newName });
+            await loadFS();
+            if (currentSelection?.folderId === folderId) { currentSelection = null; renderFileView(folderId, findSubObj(folderId, currentSelection.subId)?.id); }
+        } catch(e) { showToast(e.message); }
+    }
+    async function deleteFolder(folderId, name) {
+        if (currentRole === 'readonly') return showToast('只读账户无法删除');
+        if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
+        await moveToTrash('folder', folderId);
+        if (currentSelection?.folderId === folderId) currentSelection = null;
+    }
+    async function renameSub(folderId, subId, oldName) {
+        if (currentRole === 'readonly') return showToast('只读账户无法重命名');
+        const newName = prompt('新子分类名：', oldName);
+        if (!newName || !validName(newName)) return;
+        try {
+            await apiCall('/rename-sub', 'POST', { scope: currentScope, folderId, subId, newSub: newName });
+            await loadFS();
+            if (currentSelection?.folderId === folderId && currentSelection?.subId === subId) {
+                currentSelection.subId = subId; renderFileView(folderId, subId);
+            }
+        } catch(e) { showToast(e.message); }
+    }
+    async function deleteSub(folderId, subId, name) {
+        if (currentRole === 'readonly') return showToast('只读账户无法删除');
+        if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
+        await moveToTrash('sub', folderId, subId);
+        if (currentSelection?.folderId === folderId && currentSelection?.subId === subId) currentSelection = null;
+    }
+    async function addSubFolder(folderId) {
+        if (currentRole === 'readonly') return showToast('只读账户无法添加');
+        const newName = prompt('子分类名称：');
+        if (!newName || !validName(newName)) return;
+        const container = getCurrentFS();
+        const folder = container.folders.find(f => f.id === folderId);
+        if (!folder) return;
+        folder.children.push({ id: crypto.randomUUID ? crypto.randomUUID() : 'tmp_'+Date.now(), name: newName, files: [] });
+        renderTree();
+        try { await saveFS(); } catch(e) { showToast(e.message); }
+    }
 
-    function toggleSelectMode(enable) { /* ... */ }
-    function renderFileView(folderId, subId) { /* 基于 id 渲染 */ }
-    async function downloadFile(folder, sub, fileObj) { /* ... */ }
-    async function downloadSelectedFiles() { /* ... */ }
-    async function previewFile(folder, sub, fileObj) { /* ... */ }
-    async function openEditor(folder, sub, idx, fileName) { /* ... 修复中文编码 */ }
-    async function uploadFiles(files) { /* ... 上传成功后 loadFS 并刷新视图 */ }
+    function toggleSelectMode(enable) {
+        selectMode = enable;
+        const btn = document.getElementById('downloadBtn');
+        btn.innerHTML = selectMode ? '<i class="fas fa-check"></i> 确认下载' : '<i class="fas fa-download"></i> 下载';
+        document.querySelectorAll('.file-card').forEach(card => {
+            if (selectMode) card.classList.add('selectable'); else card.classList.remove('selectable', 'selected');
+        });
+        selectedFiles.clear();
+    }
+
+    function renderFileView(folderId, subId) {
+        const child = findSubObj(folderId, subId);
+        const fv = document.getElementById('fileView');
+        fv.innerHTML = '';
+        if (!child) { fv.innerHTML = '<h2 style="color:var(--text-secondary);">未找到该分类</h2>'; return; }
+        const h2 = document.createElement('h2'); h2.style.cssText = 'margin-bottom:1rem;color:var(--text);';
+        h2.innerHTML = `<i class="fas fa-folder-open" style="margin-right:8px;color:var(--primary);"></i>${child.name}`;
+        fv.appendChild(h2);
+        if (currentRole !== 'readonly') {
+            const addBtn = document.createElement('button'); addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
+            addBtn.setAttribute('onclick', 'window._triggerUpload()');
+            fv.appendChild(addBtn);
+        }
+        if (!child.files.length) { fv.innerHTML += '<p style="color:var(--text-secondary);">暂无文件，拖拽文件到此处或点击上传</p>'; return; }
+        const grid = document.createElement('div'); grid.className='file-grid';
+        child.files.forEach((f, i) => {
+            const fileName = f.name;
+            const isImage = f.mime?.startsWith('image/');
+            const isPDF = f.mime === 'application/pdf';
+            let iconClass = 'fa-file-alt';
+            if (/\.(png|jpg|jpeg|gif|bmp|svg|webp)$/i.test(fileName) || isImage) iconClass='fa-file-image';
+            else if (/\.(mp4|webm|ogg|mov|avi)$/i.test(fileName)) iconClass='fa-file-video';
+            else if (/\.(mp3|wav|flac|aac)$/i.test(fileName)) iconClass='fa-file-audio';
+            else if (/\.pdf$/i.test(fileName) || isPDF) iconClass='fa-file-pdf';
+            const card = document.createElement('div'); card.className='file-card';
+            const folderObj = findFolderObj(folderId);
+            const folderName = folderObj ? folderObj.name : folderId;
+            const fileKey = `${folderName}/${child.name}/${fileName}`;
+            if (selectMode) {
+                card.classList.add('selectable');
+                if (selectedFiles.has(fileKey)) card.classList.add('selected');
+            }
+            const checkMark = document.createElement('div'); checkMark.className='check-mark'; checkMark.innerHTML='<i class="fas fa-check"></i>'; card.appendChild(checkMark);
+            if (currentRole !== 'readonly') {
+                const delBtn = document.createElement('button'); delBtn.className='del-file'; delBtn.textContent='×';
+                delBtn.onclick = async e => {
+                    e.stopPropagation();
+                    if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
+                    if (selectedFiles.has(fileKey)) selectedFiles.delete(fileKey);
+                    await moveToTrash('file', folderId, subId, fileName);
+                };
+                card.appendChild(delBtn);
+            }
+            const icon = document.createElement('i'); icon.className=`fas ${iconClass}`; icon.style.cssText='font-size:2rem;display:block;margin:0 auto 0.5rem;color:var(--primary);';
+            const nameEl = document.createElement('span'); nameEl.style.cssText='display:block;word-break:break-all;font-size:0.8rem;color:var(--text);'; nameEl.textContent = fileName;
+            card.appendChild(icon); card.appendChild(nameEl);
+            if (currentRole !== 'readonly' && /\.(txt|md|json|csv|py|js|html|css|log|xml|yaml)$/i.test(fileName) && f.type==='file') {
+                const editBtn = document.createElement('button'); editBtn.textContent='编辑'; editBtn.style.cssText='margin-top:4px;background:none;border:1px solid var(--primary);color:var(--primary);border-radius:4px;padding:2px 8px;font-size:0.78rem;cursor:pointer;';
+                editBtn.onclick = e => { e.stopPropagation(); openEditor(folderName, child.name, i, fileName); };
+                card.appendChild(editBtn);
+            }
+            card.addEventListener('click', e => {
+                if (e.target.closest('button')) return;
+                if (selectMode) {
+                    if (selectedFiles.has(fileKey)) { selectedFiles.delete(fileKey); card.classList.remove('selected'); }
+                    else { selectedFiles.add(fileKey); card.classList.add('selected'); }
+                    return;
+                }
+                if (isImage || isPDF) previewFile(folderName, child.name, f);
+                else downloadFile(folderName, child.name, f);
+            });
+            grid.appendChild(card);
+        });
+        fv.appendChild(grid);
+    }
+
+    async function downloadFile(folder, sub, fileObj) {
+        const fileName = fileObj.name;
+        try {
+            const headers = { 'Content-Type':'application/json' }; if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            const url = `${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`;
+            const res = await fetch(url, { headers });
+            if (!res.ok) { const err = await res.json(); showToast('下载失败: '+err.error); return; }
+            const base64 = await res.text();
+            const mime = fileObj.mime || 'application/octet-stream';
+            const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: mime });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; a.click(); URL.revokeObjectURL(a.href);
+        } catch(err) { showToast('下载出错: '+err.message); }
+    }
+    async function downloadSelectedFiles() {
+        if (selectedFiles.size === 0) { showToast('未选择任何文件'); return; }
+        const container = getCurrentFS();
+        for (const key of selectedFiles) {
+            const parts = key.split('/');
+            if (parts.length < 3) continue;
+            const folder = parts[0], sub = parts.slice(1, -1).join('/'), file = parts[parts.length-1];
+            const folderObj = container.folders.find(f => f.name === folder);
+            if (!folderObj) continue;
+            const subObj = folderObj.children.find(c => c.name === sub);
+            if (!subObj) continue;
+            const fileObj = subObj.files.find(f => f.name === file);
+            if (fileObj) await downloadFile(folder, sub, fileObj);
+        }
+        toggleSelectMode(false);
+        if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
+    }
+
+    async function previewFile(folder, sub, fileObj) {
+        const mime = fileObj.mime || '';
+        if (mime.startsWith('image/')) {
+            const headers = { 'Content-Type':'application/json' }; if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, { headers });
+            const base64 = await res.text();
+            document.getElementById('previewImage').src = `data:${mime};base64,${base64}`;
+            document.getElementById('previewModal').classList.add('open');
+        } else if (mime === 'application/pdf') {
+            downloadFile(folder, sub, fileObj);
+        } else { downloadFile(folder, sub, fileObj); }
+    }
+    document.getElementById('previewClose').addEventListener('click', () => document.getElementById('previewModal').classList.remove('open'));
+
+    let editorCurrentSub = null, editorFileName = '';
+    async function openEditor(folder, sub, idx, fileName) {
+        const container = getCurrentFS();
+        const folderObj = container.folders.find(f => f.name === folder);
+        if (!folderObj) return;
+        const subObj = folderObj.children.find(c => c.name === sub);
+        if (!subObj) return;
+        try {
+            const headers = { 'Content-Type':'application/json' }; if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, { headers });
+            if (!res.ok) { const err = await res.json(); showToast('无法读取: '+err.error); return; }
+            const base64 = await res.text();
+            const binary = atob(base64);
+            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+            const text = new TextDecoder('utf-8').decode(bytes);
+            document.getElementById('editorFileName').textContent = fileName;
+            document.getElementById('editorTextarea').value = text;
+            document.getElementById('editorModal').classList.add('open');
+            editorCurrentSub = { folder, sub }; editorFileName = fileName;
+        } catch(e) { showToast('打开失败: '+e.message); }
+    }
+    document.getElementById('editorSave').addEventListener('click', async () => {
+        const newContent = document.getElementById('editorTextarea').value;
+        if (newContent.length > MAX_EDIT_SIZE) { showToast(`内容过大（${(newContent.length/1024).toFixed(1)}KB），限制 ${MAX_EDIT_SIZE/1024}KB`); return; }
+        if (!editorCurrentSub) return;
+        showLoading(true);
+        try {
+            await apiCall('/edit-file', 'POST', { scope: currentScope, folder: editorCurrentSub.folder, subFolder: editorCurrentSub.sub, fileName: editorFileName, content: newContent });
+            document.getElementById('editorModal').classList.remove('open');
+            await loadFS();
+            if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
+        } catch(e) { showToast(e.message); } finally { showLoading(false); }
+    });
+    document.getElementById('editorCancel').addEventListener('click', () => document.getElementById('editorModal').classList.remove('open'));
+
+    function updateProgress(percent, statusText = '') {
+        document.getElementById('progressContainer').style.display = percent > 0 ? 'block' : 'none';
+        document.getElementById('progressBar').style.width = percent + '%';
+        document.getElementById('uploadStatus').textContent = statusText;
+    }
+
+    async function uploadFiles(files) {
+        if (!currentSelection) return showToast('请先选择子分类');
+        if (currentRole === 'readonly') return showToast('只读账户无法上传');
+        const { folderId, subId } = currentSelection;
+        const child = findSubObj(folderId, subId);
+        if (!child) return showToast('子分类不存在');
+        const folderObj = findFolderObj(folderId);
+        const subObj = child;
+        const folderName = folderObj ? folderObj.name : folderId;
+        const subName = subObj ? subObj.name : subId;
+        showLoading(true);
+        let totalProcessed = 0;
+        const totalFileChunks = files.reduce((sum, file) => sum + Math.ceil(file.size / CHUNK_SIZE), 0);
+        try {
+            for (const file of files) {
+                if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} 超过100MB限制，已跳过`); continue; }
+                const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+                for (let j=0; j<totalChunks; j++) {
+                    const chunk = file.slice(j * CHUNK_SIZE, Math.min((j+1)*CHUNK_SIZE, file.size));
+                    const chunkData = await new Promise((res, rej) => {
+                        const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(chunk);
+                    });
+                    await apiCall('/upload-chunk', 'POST', {
+                        scope: currentScope, fileName: file.name, folder: folderName, subFolder: subName,
+                        chunkIndex: j, totalChunks, data: chunkData.split(',')[1], mime: file.type
+                    });
+                    totalProcessed++;
+                    updateProgress(Math.round((totalProcessed / totalFileChunks) * 100), `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
+                }
+                subObj.files.push({ name: file.name, type:'file', size: file.size, mime: file.type || 'application/octet-stream' });
+            }
+            await saveFS();
+            showToast('上传成功');
+            await loadFS();
+            renderFileView(folderId, subId);
+        } catch(e) { showToast('上传失败: '+e.message); }
+        finally { updateProgress(0); showLoading(false); }
+    }
 
     window._handleFileSelect = async function(input) {
         if (!input.files || !input.files.length) return;
@@ -515,14 +739,45 @@
         input.value = '';
     };
     window._triggerUpload = function() { if (!currentSelection) return showToast('请先选择子分类'); document.getElementById('hiddenFileInput').click(); };
-    window._downloadAction = function() { /* ... */ };
+    window._downloadAction = function() {
+        if (!currentSelection) return showToast('请先选择子分类');
+        if (!selectMode) { toggleSelectMode(true); renderFileView(currentSelection.folderId, currentSelection.subId); }
+        else { downloadSelectedFiles(); }
+    };
     window._refresh = function() { if (currentUser) loadFS(); };
-    window._toggleTrash = function() { /* ... */ };
-    window._exportStructure = function() { /* ... */ };
-    window._switchScope = function(scope) { /* ... */ };
-    window._addFolder = async function() { /* ... */ };
-    window._emptyTrash = async function() { /* ... */ };
-    window._copyInviteCode = function() { /* ... */ };
+    window._toggleTrash = function() {
+        const panel = document.getElementById('trashPanel'); panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) renderTrash();
+    };
+    window._exportStructure = function() {
+        const container = getCurrentFS();
+        const blob = new Blob([JSON.stringify({ scope: currentScope, folders: container.folders, trash: container.trash }, null, 2)], { type:'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click();
+    };
+    window._switchScope = function(scope) {
+        if (scope === currentScope) return;
+        currentScope = scope;
+        document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active');
+        currentSelection = null; if (selectMode) toggleSelectMode(false);
+        loadFS().then(() => { document.getElementById('fileView').innerHTML = '<h2 style="color:var(--text-secondary);">请选择文件夹</h2>'; document.getElementById('trashPanel').classList.add('hidden'); });
+    };
+    window._addFolder = async function() {
+        if (currentRole === 'readonly') return showToast('只读账户无法创建');
+        const name = prompt('新文件夹名称：'); if (!name || !validName(name)) return showToast('名称无效');
+        const container = getCurrentFS();
+        container.folders.push({ id: crypto.randomUUID ? crypto.randomUUID() : 'tmp_'+Date.now(), name, passwordHash: '', passwordSalt: '', children: [] });
+        renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); }
+    };
+    window._emptyTrash = async function() {
+        if (currentRole==='readonly') return showToast('只读账户无法清空');
+        if (!confirm('清空回收站将永久删除所有项目，确定？')) return;
+        const container = getCurrentFS();
+        const len = container.trash ? container.trash.length : 0;
+        for (let i=len-1; i>=0; i--) { await apiCall('/permanent-delete','POST',{scope: currentScope, index:i}); }
+        await loadFS();
+    };
+    window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
     window._openSettings = function() { document.getElementById('settingsModal').classList.add('open'); updateSettingsThemeIcon(); };
     window._openProfile = function() { document.getElementById('profileModal').classList.add('open'); };
     window._openPasswordModal = function() { document.getElementById('passwordSubModal').classList.add('open'); };
@@ -531,21 +786,92 @@
     window._openAvatarModal = function() { document.getElementById('avatarSubModal').classList.add('open'); };
     window._openBgSettings = function() { document.getElementById('bgSubModal').classList.add('open'); };
     window._logout = function() { logout(); };
-    window._toggleTheme = function() { /* ... */ };
-    window._setBg = function(bg) { /* ... */ };
-    window._saveBgUrl = function() { /* ... */ };
-    window._updatePassword = async function() { /* ... */ };
-    window._updateSecondPwd = async function() { /* ... */ };
-    window._updateUsername = async function() { /* ... */ };
-    window._uploadAvatar = async function() { /* ... */ };
-    window._saveAvatarUrl = function() { /* ... */ };
-    window._useGravatar = function() { /* ... */ };
+    window._toggleTheme = function() { document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); updateSettingsThemeIcon(); };
+    window._setBg = function(bg) { userBg = bg; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
+    window._saveBgUrl = function() {
+        const url = document.getElementById('bgImageUrl').value.trim();
+        if (url && !url.match(/^https?:\/\//)) { showToast('请输入有效的 HTTP/HTTPS URL'); return; }
+        if (url) { userBgImage = url; userBg = ''; localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', ''); }
+        applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open');
+    };
+    window._updatePassword = async function() {
+        const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value;
+        if (!oldPwd || !newPwd) return showToast('请填写完整');
+        if (newPwd.length<6) return showToast('新密码至少6位');
+        if (newPwd!==conf) return showToast('两次输入不一致');
+        try { await apiCall('/update-profile', 'POST', { oldPassword:oldPwd, newPassword:newPwd }); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+    };
+    window._updateSecondPwd = async function() {
+        const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value;
+        if (!oldS || !newS) return showToast('请填写完整');
+        if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字');
+        if (newS!==conf) return showToast('两次输入不一致');
+        try { await apiCall('/update-profile', 'POST', { oldSecondPassword:oldS, newSecondPassword:newS }); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+    };
+    window._updateUsername = async function() {
+        const newName = document.getElementById('newUsername').value.trim(); if (!newName) return showToast('请输入新用户名');
+        try {
+            const res = await apiCall('/update-profile', 'POST', { newUsername:newName });
+            authToken = res.token; localStorage.setItem('authToken', authToken);
+            currentUser.username = res.newUsername; document.getElementById('profileUsername').textContent = res.newUsername;
+            showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open');
+        } catch(e) { showToast(e.message); }
+    };
+    window._uploadAvatar = async function() {
+        const file = document.getElementById('avatarFileInput').files[0]; if (!file) return showToast('请选择图片'); if (file.size > 2*1024*1024) return showToast('头像不能超过2MB');
+        showLoading(true);
+        try {
+            const reader = new FileReader(); const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
+            const res = await apiCall('/upload-avatar', 'POST', { data: dataUrl.split(',')[1], mime: file.type });
+            document.getElementById('avatarImg').src = res.avatarUrl; document.getElementById('profileAvatarImg').src = res.avatarUrl;
+            showToast('头像已更新');
+        } catch(e) { showToast(e.message); } finally { showLoading(false); }
+    };
+    window._saveAvatarUrl = function() {
+        const url = document.getElementById('avatarUrl').value.trim();
+        if (url) { document.getElementById('avatarImg').src = url; document.getElementById('profileAvatarImg').src = url; showToast('头像已更新'); }
+    };
+    window._useGravatar = function() {
+        if (currentUser?.email) { document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${currentUser.email}?d=identicon`; }
+        else showToast('未绑定邮箱');
+    };
 
-    function applyBackground() { /* ... */ }
-    async function renderTrash() { /* ... */ }
-    function updateSettingsThemeIcon() { /* ... */ }
+    function applyBackground() {
+        if (userBgImage) { document.body.style.setProperty('--body-bg-image', `url(${userBgImage})`); document.body.style.setProperty('--body-bg-color', 'transparent'); }
+        else if (userBg && userBg !== 'default') {
+            const gradients = { gradient1:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', gradient2:'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', gradient3:'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' };
+            document.body.style.setProperty('--body-bg-image', gradients[userBg]||'none'); document.body.style.setProperty('--body-bg-color', 'transparent');
+        } else { document.body.style.setProperty('--body-bg-image', 'none'); document.body.style.setProperty('--body-bg-color', ''); }
+    }
 
-    // 初始化：尝试从 localStorage 恢复 token 并验证
+    async function renderTrash() {
+        const list = document.getElementById('trashList'); list.innerHTML = '';
+        const container = getCurrentFS(); if (!container.trash?.length) { list.innerHTML = '<li style="color:var(--text-secondary);">回收站为空</li>'; return; }
+        container.trash.forEach((item, index) => {
+            const li = document.createElement('li'); li.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;';
+            let label = ''; if (item.type==='file') label = `📄 ${item.file.name}`; else if (item.type==='sub') label = `📁 ${item.sub.name} (子分类)`; else label = `📂 ${item.folder.name} (文件夹)`;
+            li.innerHTML = `<span>${label}</span>`;
+            const actions = document.createElement('span');
+            if (currentRole !== 'readonly') {
+                const restoreBtn = document.createElement('button'); restoreBtn.innerHTML = '<i class="fas fa-undo"></i>'; restoreBtn.title='恢复'; restoreBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--primary);font-size:1rem;';
+                restoreBtn.onclick = async () => { await apiCall('/restore-from-trash','POST',{scope: currentScope, index}); await loadFS(); };
+                const delBtn = document.createElement('button'); delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>'; delBtn.title='彻底删除'; delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;';
+                delBtn.onclick = async () => { if (!confirm('永久删除不可恢复！')) return; await apiCall('/permanent-delete','POST',{scope: currentScope, index}); await loadFS(); };
+                actions.appendChild(restoreBtn); actions.appendChild(delBtn);
+            }
+            li.appendChild(actions); list.appendChild(li);
+        });
+    }
+
+    function updateSettingsThemeIcon() {
+        const themeToggle = document.getElementById('themeToggleSettings'); if (!themeToggle) return;
+        themeToggle.innerHTML = document.body.classList.contains('dark') ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    }
+
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) document.body.classList.add('dark');
+    updateSettingsThemeIcon();
+
     async function tryAutoLogin() {
         if (authToken) {
             try {
@@ -555,44 +881,54 @@
                     currentRole = data.role || 'admin';
                     document.getElementById('loginPanel').style.display = 'none';
                     document.getElementById('mainPanel').classList.add('active');
-                    document.getElementById('displayUsername')?.textContent?.(currentUser.username);
-                    await loadFS();
-                    applyBackground();
+                    await loadFS(); applyBackground();
                 }
-            } catch(e) {
-                authToken = null;
-                localStorage.removeItem('authToken');
-            }
+            } catch(e) { authToken = null; localStorage.removeItem('authToken'); }
         }
     }
 
-    // 登录成功后保存 token
+    document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
+    document.getElementById('goLogin').onclick = () => { document.getElementById('registerPanel').style.display='none'; document.getElementById('loginPanel').style.display='flex'; };
+    document.getElementById('loginBackBtn').onclick = () => { document.getElementById('loginStep2').classList.add('hidden'); document.getElementById('loginStep1').classList.remove('hidden'); partialToken=null; };
+    document.getElementById('registerBtn').onclick = async () => {
+        const u = document.getElementById('regUsername').value.trim(), em = document.getElementById('regEmail').value.trim(), p = document.getElementById('regPassword').value, cp = document.getElementById('regConfirmPwd').value;
+        const sp = document.getElementById('regSecondPwd').value.trim(), csp = document.getElementById('regConfirmSecondPwd').value.trim(), inv = document.getElementById('inviteCode').value.trim();
+        if (u.length<4||u.length>20) return showToast('用户名4-20字符'); if (em && !validEmail(em)) return showToast('邮箱格式不正确');
+        if (p.length<6) return showToast('密码至少6位'); if (p!==cp) return showToast('两次密码不一致');
+        if (!/^\d{6}$/.test(sp)) return showToast('二级密码需6位数字'); if (sp!==csp) return showToast('两次二级密码不一致'); if (!inv) return showToast('请输入邀请码');
+        try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
+    };
+    document.getElementById('loginNextBtn').onclick = async () => {
+        const acc = document.getElementById('loginUsername').value.trim(), pwd = document.getElementById('loginPassword').value;
+        if (!acc || !pwd) return showToast('请填写账号和密码');
+        try { const res = await apiCall('/login','POST',{username:acc,password:pwd}); partialToken = res.partialToken; document.getElementById('loginAccountDisplay').textContent = res.username; document.getElementById('loginStep1').classList.add('hidden'); document.getElementById('loginStep2').classList.remove('hidden'); } catch(e) { showToast(e.message); }
+    };
+    document.getElementById('loginConfirmBtn').onclick = async () => {
+        const sp = document.getElementById('loginSecondPwd').value.trim(); if (!/^\d{6}$/.test(sp)) return showToast('请输入6位数字');
+        try {
+            const headers = { 'Content-Type':'application/json', 'Authorization':`Bearer ${partialToken}` };
+            const res = await fetch(API_BASE + '/verify-second-password', { method:'POST', headers, body:JSON.stringify({ secondPassword:sp }) });
+            const data = await res.json(); if (!res.ok) throw new Error(data.error || '验证失败');
+            handleLoginSuccess(data);
+        } catch(e) { showToast(e.message); }
+    };
     function handleLoginSuccess(data) {
-        authToken = data.token;
-        localStorage.setItem('authToken', authToken);
+        authToken = data.token; localStorage.setItem('authToken', authToken);
         currentUser = { username: data.username, email: data.email, inviteCode: data.inviteCode, avatar: data.avatar || '' };
         currentRole = data.role || 'admin';
-        document.getElementById('loginPanel').style.display = 'none';
-        document.getElementById('mainPanel').classList.add('active');
-        document.getElementById('profileUsername').textContent = data.username;
-        document.getElementById('myInviteCode').value = data.inviteCode || '';
-        document.getElementById('avatarImg').src = data.avatar || 'data:image/svg+xml,...';
-        document.getElementById('profileAvatarImg').src = data.avatar || 'data:image/svg+xml,...';
-        unlockedFolders = {};
-        persistUnlocked();
-        loadFS();
-        applyBackground();
+        document.getElementById('loginPanel').style.display = 'none'; document.getElementById('mainPanel').classList.add('active');
+        document.getElementById('profileUsername').textContent = data.username; document.getElementById('myInviteCode').value = data.inviteCode || '';
+        document.getElementById('avatarImg').src = data.avatar || 'data:image/svg+xml,...'; document.getElementById('profileAvatarImg').src = data.avatar || 'data:image/svg+xml,...';
+        unlockedFolders = {}; persistUnlocked(); loadFS(); applyBackground();
     }
 
-    // 注册、登录等事件绑定（略，保持原有逻辑并调用 handleLoginSuccess）
-    // ...
-
-    // 主题初始化
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) {
-        document.body.classList.add('dark');
-    }
-    updateSettingsThemeIcon();
+    document.getElementById('closeProfileModal').addEventListener('click', ()=> document.getElementById('profileModal').classList.remove('open'));
+    document.getElementById('closeSettingsModal').addEventListener('click', ()=> document.getElementById('settingsModal').classList.remove('open'));
+    document.getElementById('cancelPasswordBtn').addEventListener('click', ()=> document.getElementById('passwordSubModal').classList.remove('open'));
+    document.getElementById('cancelSecondPwdBtn').addEventListener('click', ()=> document.getElementById('secondPwdSubModal').classList.remove('open'));
+    document.getElementById('cancelUsernameBtn').addEventListener('click', ()=> document.getElementById('usernameSubModal').classList.remove('open'));
+    document.getElementById('cancelAvatarBtn').addEventListener('click', ()=> document.getElementById('avatarSubModal').classList.remove('open'));
+    document.getElementById('cancelBgBtn').addEventListener('click', ()=> document.getElementById('bgSubModal').classList.remove('open'));
 
     document.getElementById('loginPanel').style.display = 'flex';
     tryAutoLogin();
