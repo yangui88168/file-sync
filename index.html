@@ -21,6 +21,7 @@
             --body-bg-color: #f0f2f5;
             --scope-public: #2563eb;
             --scope-private: #8b5cf6;
+            --danger: #dc2626;
         }
         body.dark {
             --bg: #0f172a;
@@ -52,7 +53,7 @@
         .hidden { display:none !important; }
         .main-container { display:none; width:100%; height:100vh; background:transparent; flex-direction:column; }
         .main-container.active { display:flex; }
-        .toolbar { background:var(--card-bg); padding:0.7rem 1.5rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:0.5rem; }
+        .toolbar { background:var(--card-bg); padding:0.7rem 1.5rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:0.5rem; position:relative; }
         .toolbar-left, .toolbar-right { display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; }
         .toolbar-btn { background:var(--primary); color:#fff; border:none; padding:0.5rem 1rem; border-radius:8px; cursor:pointer; white-space:nowrap; font-size:0.9rem; transition:background 0.2s; }
         .toolbar-btn:hover { background:var(--primary-hover); }
@@ -111,6 +112,8 @@
         .avatar-img { width:38px; height:38px; border-radius:50%; object-fit:cover; cursor:pointer; }
         .avatar-img-large { width:60px; height:60px; border-radius:50%; object-fit:cover; }
         .settings-icon { background:none; border:none; cursor:pointer; font-size:1.5rem; color:var(--text); }
+        .toast { position:fixed; top:20px; right:20px; background:var(--danger); color:white; padding:0.8rem 1.2rem; border-radius:8px; z-index:3000; opacity:0; transition:opacity 0.3s; }
+        .toast.show { opacity:1; }
         @media (max-width:768px) {
             .sidebar { width:260px; position:absolute; z-index:10; height:100%; transform:translateX(-100%); }
             .sidebar.open { transform:translateX(0); }
@@ -197,6 +200,7 @@
 </div>
 
 <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
 
 <div class="modal-overlay" id="editorModal">
     <div class="modal-content">
@@ -332,6 +336,18 @@
     let selectMode = false;
     let selectedFiles = new Set();
 
+    // 背景变量（始终从 localStorage 读取）
+    let userBg = localStorage.getItem('userBg') || '';
+    let userBgImage = localStorage.getItem('userBgImage') || '';
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = '⚠️ ' + msg;
+        toast.classList.add('show');
+        clearTimeout(toast._timeout);
+        toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
     try {
         const saved = sessionStorage.getItem('unlockedFolders');
         if (saved) unlockedFolders = JSON.parse(saved);
@@ -363,7 +379,7 @@
     }
 
     function showLoading(show=true) { document.getElementById('loadingOverlay').classList.toggle('active', show); }
-    function showError(msg) { alert('⚠️ ' + msg); }
+    function showError(msg) { showToast(msg); }
 
     function logout() {
         authToken = null; partialToken = null; currentUser = null; currentRole = '';
@@ -528,7 +544,7 @@
                 persistUnlocked();
             }
             renderTree();
-            alert(newPwd ? '密码已设置！' : '密码已清除！');
+            showError(newPwd ? '密码已设置！' : '密码已清除！');
         } catch(e) { showError(e.message); }
     }
 
@@ -597,14 +613,17 @@
         const btn = document.getElementById('downloadBtn');
         if (selectMode) {
             btn.innerHTML = '<i class="fas fa-check"></i> 确认下载';
-            btn.classList.add('outline');
-            document.querySelectorAll('.file-card').forEach(card => card.classList.add('selectable'));
         } else {
             btn.innerHTML = '<i class="fas fa-download"></i> 下载';
-            btn.classList.add('outline');
-            document.querySelectorAll('.file-card').forEach(card => card.classList.remove('selectable', 'selected'));
-            selectedFiles.clear();
         }
+        document.querySelectorAll('.file-card').forEach(card => {
+            if (selectMode) {
+                card.classList.add('selectable');
+            } else {
+                card.classList.remove('selectable', 'selected');
+            }
+        });
+        selectedFiles.clear();
     }
 
     function renderFileView(folder, sub) {
@@ -1059,7 +1078,7 @@
     document.getElementById('refreshBtn').onclick = async () => { if (currentUser) await loadFS(); };
 
     document.getElementById('uploadBtn').onclick = () => {
-        if (!currentSelection) return showError('请先选择子分类');
+        if (!currentSelection) return showError('请先在左侧选择一个子分类');
         document.getElementById('hiddenFileInput').click();
     };
     document.getElementById('hiddenFileInput').onchange = async function () {
@@ -1094,8 +1113,7 @@
 
     document.getElementById('settingsBtn').addEventListener('click', () => {
         document.getElementById('settingsModal').classList.add('open');
-        const isDark = document.body.classList.contains('dark');
-        document.getElementById('themeToggleSettings').innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        syncThemeUI();
     });
 
     document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
@@ -1114,7 +1132,7 @@
         if (newPwd!==conf) return showError('两次输入不一致');
         try {
             await apiCall('/update-profile', 'POST', { oldPassword:oldPwd, newPassword:newPwd });
-            alert('密码已更新');
+            showError('密码已更新');
             document.getElementById('passwordSubModal').classList.remove('open');
         } catch(e) { showError(e.message); }
     });
@@ -1132,7 +1150,7 @@
         if (newS!==conf) return showError('两次输入不一致');
         try {
             await apiCall('/update-profile', 'POST', { oldSecondPassword:oldS, newSecondPassword:newS });
-            alert('二级密码已更新');
+            showError('二级密码已更新');
             document.getElementById('secondPwdSubModal').classList.remove('open');
         } catch(e) { showError(e.message); }
     });
@@ -1149,7 +1167,7 @@
             authToken = res.token;
             currentUser.username = res.newUsername;
             document.getElementById('profileUsername').textContent = res.newUsername;
-            alert('用户名已更新，令牌已刷新');
+            showError('用户名已更新');
             document.getElementById('usernameSubModal').classList.remove('open');
         } catch(e) { showError(e.message); }
     });
@@ -1175,7 +1193,7 @@
             document.getElementById('avatarImg').src = res.avatarUrl;
             document.getElementById('profileAvatarImg').src = res.avatarUrl;
             localStorage.setItem('userAvatar', res.avatarUrl);
-            alert('头像已更新');
+            showError('头像已更新');
         } catch(e) { showError(e.message); }
         finally { showLoading(false); }
     });
@@ -1185,7 +1203,7 @@
             document.getElementById('avatarImg').src = url;
             document.getElementById('profileAvatarImg').src = url;
             localStorage.setItem('userAvatar', url);
-            alert('头像已更新');
+            showError('头像已更新');
         }
     });
     document.getElementById('useGravatarBtn').addEventListener('click', () => {
@@ -1193,7 +1211,7 @@
             const gravatarUrl = `https://www.gravatar.com/avatar/${currentUser.email}?d=identicon`;
             document.getElementById('avatarUrl').value = gravatarUrl;
         } else {
-            alert('未绑定邮箱，无法使用 Gravatar');
+            showError('未绑定邮箱，无法使用 Gravatar');
         }
     });
 
@@ -1204,26 +1222,28 @@
     document.getElementById('saveBgBtn').addEventListener('click', () => {
         const url = document.getElementById('bgImageUrl').value.trim();
         if (url) {
-            localStorage.setItem('userBgImage', url);
+            userBgImage = url;
+            userBg = '';
+            localStorage.setItem('userBgImage', userBgImage);
             localStorage.setItem('userBg', '');
         }
         applyBackground();
-        alert('背景已更新');
+        showError('背景已更新');
         document.getElementById('bgSubModal').classList.remove('open');
     });
     document.querySelectorAll('.bg-preset').forEach(btn => {
         btn.addEventListener('click', () => {
             const bg = btn.dataset.bg;
-            localStorage.setItem('userBg', bg);
+            userBg = bg;
+            userBgImage = '';
+            localStorage.setItem('userBg', userBg);
             localStorage.setItem('userBgImage', '');
             applyBackground();
-            alert('背景已更新');
+            showError('背景已更新');
             document.getElementById('bgSubModal').classList.remove('open');
         });
     });
 
-    let userBg = localStorage.getItem('userBg') || '';
-    let userBgImage = localStorage.getItem('userBgImage') || '';
     function applyBackground() {
         if (userBgImage) {
             document.body.style.setProperty('--body-bg-image', `url(${userBgImage})`);
@@ -1241,12 +1261,11 @@
             document.body.style.setProperty('--body-bg-color', '');
         }
     }
-    applyBackground();
 
     document.getElementById('copyInviteBtn').addEventListener('click', () => {
         const code = document.getElementById('myInviteCode').value;
         if (code) {
-            navigator.clipboard.writeText(code).then(() => alert('邀请码已复制'));
+            navigator.clipboard.writeText(code).then(() => showError('邀请码已复制'));
         }
     });
 
