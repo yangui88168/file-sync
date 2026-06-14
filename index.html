@@ -198,6 +198,7 @@
             <button class="auth-btn tab-btn" data-tab="username" style="background:var(--border);color:var(--text);">改用户名</button>
             <button class="auth-btn tab-btn" data-tab="avatar" style="background:var(--border);color:var(--text);">头像</button>
             <button class="auth-btn tab-btn" data-tab="background" style="background:var(--border);color:var(--text);">背景</button>
+            <button class="auth-btn tab-btn" data-tab="invite" style="background:var(--border);color:var(--text);">邀请码</button>
         </div>
         <div id="panelPassword" style="display:flex;flex-direction:column;gap:0.8rem;">
             <input type="password" id="oldPassword" placeholder="原密码">
@@ -234,6 +235,14 @@
             <label>或输入背景图片 URL：</label>
             <input type="text" id="bgImageUrl" placeholder="https://example.com/bg.jpg">
             <button class="auth-btn" id="saveBgBtn">保存背景</button>
+        </div>
+        <div id="panelInvite" style="display:none;flex-direction:column;gap:0.8rem;">
+            <label>我的专属邀请码</label>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <input type="text" id="myInviteCode" readonly style="flex:1;" />
+                <button class="auth-btn" id="copyInviteBtn" style="width:auto;padding:0.5rem 1rem;">复制</button>
+            </div>
+            <small style="color:var(--text-secondary);">将此邀请码发送给朋友，他们即可注册。</small>
         </div>
         <button class="auth-btn secondary" id="closeProfileModal" style="margin-top:0.5rem;">关闭</button>
     </div>
@@ -791,8 +800,8 @@
         if (sp!==csp) return showError('两次二级密码不一致');
         if (!inv) return showError('请输入邀请码');
         try {
-            await apiCall('/register', 'POST', { username:u, email:em, password:p, secondPassword:sp, inviteCode:inv });
-            alert('注册成功！请登录。');
+            const res = await apiCall('/register', 'POST', { username:u, email:em, password:p, secondPassword:sp, inviteCode:inv });
+            alert(`注册成功！您的专属邀请码是：${res.inviteCode}，请妥善保管。`);
             document.getElementById('goLogin').click();
         } catch(e) { showError(e.message); }
     };
@@ -819,15 +828,15 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || '验证失败');
             authToken = data.token; partialToken = null;
-            currentUser = { username:data.username, email:data.email };
+            currentUser = { username:data.username, email:data.email, inviteCode:data.inviteCode };
             currentRole = data.role || 'admin';
             document.getElementById('loginPanel').style.display = 'none';
             document.getElementById('mainPanel').classList.add('active');
             document.getElementById('displayUsername').textContent = data.username;
+            document.getElementById('myInviteCode').value = data.inviteCode || '';
             unlockedFolders = {};
             persistUnlocked();
             await loadFS();
-            // 加载头像和背景
             applyBackground();
             loadAvatar();
         } catch(e) { showError(e.message); }
@@ -870,15 +879,14 @@
         a.click();
     };
 
-    // 个人设置
     document.getElementById('profileBtn').addEventListener('click', () => document.getElementById('profileModal').classList.add('open'));
     document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.tab-btn').forEach(b => { b.style.background='var(--border)'; b.style.color='var(--text)'; });
             this.style.background='var(--primary)'; this.style.color='white';
-            ['panelPassword','panelSecondPwd','panelUsername','panelAvatar','panelBackground'].forEach(id => document.getElementById(id).style.display='none');
-            const map = { password:'panelPassword', secondPwd:'panelSecondPwd', username:'panelUsername', avatar:'panelAvatar', background:'panelBackground' };
+            ['panelPassword','panelSecondPwd','panelUsername','panelAvatar','panelBackground','panelInvite'].forEach(id => document.getElementById(id).style.display='none');
+            const map = { password:'panelPassword', secondPwd:'panelSecondPwd', username:'panelUsername', avatar:'panelAvatar', background:'panelBackground', invite:'panelInvite' };
             document.getElementById(map[this.dataset.tab]).style.display='flex';
         });
     });
@@ -924,7 +932,6 @@
         } catch(e) { showError(e.message); }
     });
 
-    // 头像设置
     let userAvatar = localStorage.getItem('userAvatar') || '';
     function loadAvatar() {
         const img = document.getElementById('avatarImg');
@@ -946,15 +953,13 @@
     });
     document.getElementById('useGravatarBtn').addEventListener('click', () => {
         if (currentUser?.email) {
-            const hash = currentUser.email; // 简化示意，实际需要 MD5 哈希，可自行引入库或使用服务端生成
-            const gravatarUrl = `https://www.gravatar.com/avatar/${hash}?d=identicon`;
+            const gravatarUrl = `https://www.gravatar.com/avatar/${currentUser.email}?d=identicon`;
             document.getElementById('avatarUrl').value = gravatarUrl;
         } else {
             alert('未绑定邮箱，无法使用 Gravatar');
         }
     });
 
-    // 背景设置
     let userBg = localStorage.getItem('userBg') || '';
     let userBgImage = localStorage.getItem('userBgImage') || '';
     function applyBackground() {
@@ -999,7 +1004,13 @@
     applyBackground();
     loadAvatar();
 
-    // 回收站
+    document.getElementById('copyInviteBtn').addEventListener('click', () => {
+        const code = document.getElementById('myInviteCode').value;
+        if (code) {
+            navigator.clipboard.writeText(code).then(() => alert('邀请码已复制'));
+        }
+    });
+
     async function renderTrash() {
         const list = document.getElementById('trashList');
         list.innerHTML = '';
@@ -1055,7 +1066,6 @@
         renderTrash();
     });
 
-    // 深色模式
     const themeToggle = document.getElementById('themeToggle');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) {
