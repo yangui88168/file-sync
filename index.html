@@ -80,6 +80,11 @@
         .add-sub-btn { background:none; border:none; color:var(--primary); cursor:pointer; padding:0.3rem 0.7rem; font-size:0.85rem; border-radius:6px; display:flex; align-items:center; gap:0.3rem; margin-top:0.2rem; width:100%; }
         .add-sub-btn:hover { background:var(--hover); }
         .search-box { width:100%; padding:0.5rem; border:1px solid var(--border); border-radius:8px; margin-bottom:0.5rem; outline:none; background:var(--card-bg); color:var(--text); }
+        .search-results { background:var(--card-bg); border:1px solid var(--border); border-radius:8px; max-height:200px; overflow-y:auto; margin-bottom:0.5rem; }
+        .search-result-item { padding:0.4rem 0.6rem; cursor:pointer; border-bottom:1px solid var(--border); font-size:0.8rem; }
+        .search-result-item:hover { background:var(--hover); }
+        .search-result-item .path { color:var(--text-secondary); font-size:0.7rem; }
+        .search-result-item .context { color:var(--text-secondary); font-size:0.7rem; font-style:italic; }
         .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:1000; }
         .modal-overlay.open { display:flex; }
         .modal-content { background:var(--card-bg); border-radius:16px; padding:2rem; width:600px; max-width:90%; max-height:80vh; overflow-y:auto; position:relative; }
@@ -154,7 +159,8 @@
     <div class="content-area">
         <div class="sidebar" id="sidebar">
             <h3 style="margin-bottom:0.75rem;color:var(--text);">资料目录</h3>
-            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索...">
+            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名或内容..." autocomplete="off">
+            <div id="searchResults" class="search-results hidden"></div>
             <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;">+ 新建文件夹</button>
             <ul class="tree" id="treeRoot"></ul>
             <div id="trashPanel" class="hidden" style="margin-top:1rem;">
@@ -334,8 +340,20 @@
         } finally { showLoading(false); }
     }
 
-    async function saveFS() {
-        await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash });
+    // 乐观更新辅助：先更新本地数据并渲染，再异步保存
+    async function optimisticSave(actionName, localMutation, rollback) {
+        localMutation();
+        renderTree();
+        if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
+        // 异步保存
+        try {
+            await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash });
+        } catch (e) {
+            rollback();
+            renderTree();
+            if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
+            showError(`${actionName}失败，已回滚: ${e.message}`);
+        }
     }
 
     function findFolderObj(name) { return fsData.folders.find(f => f.name === name); }
@@ -345,8 +363,51 @@
     }
 
     async function moveToTrash(type, folder, sub, fileName) {
-        await apiCall('/move-to-trash', 'POST', { type, folder, sub, fileName });
+        // 乐观删除：先移动本地数据，再异步保存
+        const oldTrash = JSON.parse(JSON.stringify(fsData.trash));
+        const oldFolders = JSON.parse(JSON.stringify(fsData.folders));
+        const currentFolder = folder;
+        const currentSub = sub;
+        try {
+            if (type === 'file') {
+                const subObj = findSubObj(folder, sub);
+                const fileIdx = subObj.files.findIndex(f => f.name === fileName);
+                const [fileObj] = subObj.files.splice(fileIdx, 1);
+                if (!fsData.trash) fsData.trash = [];
+                fsData.trash.push({ type: 'file', folder, sub, file: fileObj, deletedAt: Date.now() });
+            } else if (type === 'sub') {
+                const folderObj = findFolderObj(folder);
+                const subIdx = folderObj.children.findIndex(c => c.name === sub);
+                const [subObj] = folderObj.children.splice(subIdx, 1);
+                fsData.trash.push({ type: 'sub', folder, sub: subObj, deletedAt: Date.now() });
+            } else if (type === 'folder') {
+                const folderIdx = fsData.folders.findIndex(f => f.name === folder);
+                const [folderObj] = fsData.folders.splice(folderIdx, 1);
+                fsData.trash.push({ type: 'folder', folder: folderObj, deletedAt: Date.now() });
+            }
+            renderTree();
+            if (currentSelection?.folder === currentFolder && currentSelection?.sub === currentSub) {
+                renderFileView(currentFolder, currentSub);
+            }
+            // 异步保存
+            try {
+                await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash });
+            } catch (e) {
+                fsData.trash = oldTrash;
+                fsData.folders = oldFolders;
+                renderTree();
+                if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
+                showError(`删除失败，已回滚: ${e.message}`);
+            }
+        } catch (e) {
+            fsData.trash = oldTrash;
+            fsData.folders = oldFolders;
+            renderTree();
+            if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
+            showError(`操作失败: ${e.message}`);
+        }
     }
+
     async function renameFolderRemote(oldName, newName) { await apiCall('/rename-folder', 'POST', { oldName, newName }); }
     async function renameSubRemote(folder, oldSub, newSub) { await apiCall('/rename-sub', 'POST', { folder, oldSub, newSub }); }
 
@@ -467,32 +528,30 @@
         const newName = prompt('新文件夹名称：', oldName);
         if (!newName || !validName(newName)) return;
         if (fsData.folders.some(f => f.name === newName)) return showError('名称已存在');
-        if (!confirm(`重命名文件夹会将所有文件移动到新路径，可能较慢，确定继续？`)) return;
-        showLoading(true);
+        const oldFolders = JSON.parse(JSON.stringify(fsData.folders));
+        const folder = findFolderObj(oldName);
+        if (!folder) return;
+        folder.name = newName;
+        renderTree();
+        if (currentSelection?.folder === oldName) {
+            currentSelection.folder = newName;
+            renderFileView(newName, currentSelection.sub);
+        }
         try {
             await renameFolderRemote(oldName, newName);
-            const folder = findFolderObj(oldName);
-            if (folder) folder.name = newName;
-            await saveFS();
+            await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash });
+        } catch(e) {
+            fsData.folders = oldFolders;
             renderTree();
-            if (currentSelection?.folder === oldName) {
-                currentSelection.folder = newName;
-                renderFileView(newName, currentSelection.sub);
-            }
-        } catch(e) { showError(e.message); }
-        finally { showLoading(false); }
+            if (currentSelection?.folder === newName) currentSelection.folder = oldName;
+            showError(`重命名失败: ${e.message}`);
+        }
     }
 
     async function deleteFolder(name) {
         if (currentRole === 'readonly') return showError('只读账户无法删除');
         if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
-        showLoading(true);
-        try {
-            await moveToTrash('folder', name);
-            await loadFS();
-            if (currentSelection?.folder === name) currentSelection = null;
-        } catch(e) { showError(e.message); }
-        finally { showLoading(false); }
+        await moveToTrash('folder', name);
     }
 
     async function renameSub(folderName, oldName) {
@@ -502,32 +561,30 @@
         const folder = findFolderObj(folderName);
         if (!folder) return;
         if (folder.children.some(c => c.name === newName)) return showError('子分类已存在');
-        if (!confirm(`重命名子分类会将其中文件移动到新路径，确定继续？`)) return;
-        showLoading(true);
+        const oldFolders = JSON.parse(JSON.stringify(fsData.folders));
+        const child = findSubObj(folderName, oldName);
+        if (!child) return;
+        child.name = newName;
+        renderTree();
+        if (currentSelection?.folder === folderName && currentSelection?.sub === oldName) {
+            currentSelection.sub = newName;
+            renderFileView(folderName, newName);
+        }
         try {
             await renameSubRemote(folderName, oldName, newName);
-            const child = findSubObj(folderName, oldName);
-            if (child) child.name = newName;
-            await saveFS();
+            await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash });
+        } catch(e) {
+            fsData.folders = oldFolders;
             renderTree();
-            if (currentSelection?.folder === folderName && currentSelection?.sub === oldName) {
-                currentSelection.sub = newName;
-                renderFileView(folderName, newName);
-            }
-        } catch(e) { showError(e.message); }
-        finally { showLoading(false); }
+            if (currentSelection?.sub === newName) currentSelection.sub = oldName;
+            showError(`重命名失败: ${e.message}`);
+        }
     }
 
     async function deleteSub(folderName, name) {
         if (currentRole === 'readonly') return showError('只读账户无法删除');
         if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
-        showLoading(true);
-        try {
-            await moveToTrash('sub', folderName, name);
-            await loadFS();
-            if (currentSelection?.folder === folderName && currentSelection?.sub === name) currentSelection = null;
-        } catch(e) { showError(e.message); }
-        finally { showLoading(false); }
+        await moveToTrash('sub', folderName, name);
     }
 
     async function addSubFolder(folderName) {
@@ -537,7 +594,8 @@
         const folder = findFolderObj(folderName);
         if (!folder) return;
         folder.children.push({ name: newName, files: [] });
-        try { await saveFS(); renderTree(); } catch(e) { showError(e.message); }
+        renderTree();
+        try { await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash }); } catch(e) { showError(e.message); }
     }
 
     function renderFileView(folder, sub) {
@@ -556,7 +614,8 @@
                 const name = prompt('文件名（含扩展名）：');
                 if (!name || !validName(name,200)) return showError('文件名无效');
                 child.files.push({ name, type:'file', size:0, mime:'application/octet-stream' });
-                try { await saveFS(); renderFileView(folder, sub); } catch(e) { showError(e.message); }
+                renderFileView(folder, sub);
+                try { await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash }); } catch(e) { showError(e.message); }
             };
             fv.appendChild(addBtn);
         }
@@ -581,13 +640,7 @@
                 delBtn.onclick = async e => {
                     e.stopPropagation();
                     if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
-                    showLoading(true);
-                    try {
-                        await moveToTrash('file', folder, sub, fileName);
-                        await loadFS();
-                        renderFileView(folder, sub);
-                    } catch(err) { showError(err.message); }
-                    finally { showLoading(false); }
+                    await moveToTrash('file', folder, sub, fileName);
                 };
                 card.appendChild(delBtn);
             }
@@ -739,7 +792,7 @@
                 }
                 child.files.push({ name: file.name, type:'file', size: file.size, mime: file.type || 'application/octet-stream' });
             }
-            await saveFS();
+            await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash });
         } catch(e) { showError('上传失败: '+e.message); }
         finally {
             updateProgress(0);
@@ -762,8 +815,13 @@
 
     document.getElementById('sidebarToggle').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 
-    document.getElementById('searchInput').addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase();
+    // 搜索功能（全文搜索 + 侧边栏过滤）
+    const searchInput = document.getElementById('searchInput');
+    const searchResults = document.getElementById('searchResults');
+    let searchTimer;
+
+    function filterSidebarTree(query) {
+        const q = query.toLowerCase();
         document.querySelectorAll('.sub-item').forEach(el => {
             el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
         });
@@ -773,8 +831,69 @@
             const hasVisible = subList && [...subList.querySelectorAll('.sub-item')].some(c => c.style.display !== 'none');
             el.style.display = (text.includes(q) || hasVisible) ? '' : 'none';
         });
+    }
+
+    searchInput.addEventListener('input', (e) => {
+        const q = e.target.value.trim();
+        filterSidebarTree(q);
+        clearTimeout(searchTimer);
+        if (q.length < 2) {
+            searchResults.classList.add('hidden');
+            searchResults.innerHTML = '';
+            return;
+        }
+        searchTimer = setTimeout(() => performGlobalSearch(q), 300);
     });
 
+    async function performGlobalSearch(query) {
+        try {
+            const res = await apiCall('/search', 'POST', { query });
+            const results = res.results || [];
+            if (results.length === 0) {
+                searchResults.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">无结果</div>';
+            } else {
+                searchResults.innerHTML = results.map(r => `
+                    <div class="search-result-item" data-folder="${escapeHtml(r.folder)}" data-sub="${escapeHtml(r.sub)}" data-file="${escapeHtml(r.file)}">
+                        <div><strong>${highlightText(r.file, query)}</strong></div>
+                        <div class="path">${escapeHtml(r.folder)} / ${escapeHtml(r.sub)}</div>
+                        ${r.context ? `<div class="context">${highlightText(r.context, query)}</div>` : ''}
+                    </div>
+                `).join('');
+                searchResults.querySelectorAll('.search-result-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const folder = item.dataset.folder;
+                        const sub = item.dataset.sub;
+                        const subItems = document.querySelectorAll('.sub-item');
+                        for (const si of subItems) {
+                            if (si.textContent.includes(sub)) {
+                                si.click();
+                                break;
+                            }
+                        }
+                        searchResults.classList.add('hidden');
+                        searchInput.value = '';
+                        filterSidebarTree('');
+                    });
+                });
+            }
+            searchResults.classList.remove('hidden');
+        } catch (e) {
+            searchResults.innerHTML = '<div class="search-result-item" style="color:red;">搜索失败</div>';
+        }
+    }
+
+    function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.classList.add('hidden');
+        }
+    });
+
+    // 登录/注册面板切换
     document.getElementById('goRegister').onclick = () => {
         document.getElementById('loginPanel').style.display = 'none';
         document.getElementById('registerPanel').style.display = 'flex';
@@ -854,7 +973,8 @@
         const name = prompt('新文件夹名称：');
         if (!name || !validName(name)) return showError('名称无效');
         fsData.folders.push({ name, hasPassword:false, children:[] });
-        try { await saveFS(); renderTree(); } catch(e) { showError(e.message); }
+        renderTree();
+        try { await apiCall('/update-fs', 'PUT', { folders: fsData.folders, trash: fsData.trash }); } catch(e) { showError(e.message); }
     };
 
     document.getElementById('refreshBtn').onclick = async () => { if (currentUser) await loadFS(); };
