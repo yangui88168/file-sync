@@ -318,7 +318,7 @@
     </div>
 </div>
 
-<input type="file" id="hiddenFileInput" style="display:none;" multiple>
+<input type="file" id="hiddenFileInput" style="display:none;" multiple onchange="window._handleFileSelect(this)">
 
 <script>
 (function () {
@@ -866,19 +866,19 @@
                 child.files.push({ name: file.name, type:'file', size: file.size, mime: file.type || 'application/octet-stream' });
             }
             await saveFS();
-        } catch(e) { showToast('上传失败: '+e.message); }
-        finally {
+        } catch(e) {
+            showToast('上传失败: '+e.message);
+            throw e;
+        } finally {
             updateProgress(0);
             showLoading(false);
-            // 强制重新加载文件系统以同步最新数据
+            // 强制重新加载文件系统并刷新视图
             await loadFS();
-            // 重新选择当前子分类并渲染
             if (currentSelection) {
-                const { folder: f, sub: s } = currentSelection;
                 const container = getCurrentFS();
-                const newChild = container.folders.find(fd => fd.name === f)?.children?.find(c => c.name === s);
+                const newChild = container.folders.find(fd => fd.name === currentSelection.folder)?.children?.find(c => c.name === currentSelection.sub);
                 if (newChild) {
-                    renderFileView(f, s);
+                    renderFileView(currentSelection.folder, currentSelection.sub);
                 } else {
                     document.getElementById('fileView').innerHTML = '<h2 style="color:var(--text-secondary);">未找到该分类</h2>';
                 }
@@ -1064,7 +1064,7 @@
     document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
     document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
 
-    // 设置按钮额外绑定（确保万无一失）
+    // 设置按钮双重绑定
     document.getElementById('settingsBtn').addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -1079,6 +1079,11 @@
     window._triggerUpload = function() {
         if (!currentSelection) return showToast('请先在左侧选择一个子分类');
         document.getElementById('hiddenFileInput').click();
+    };
+    window._handleFileSelect = function(input) {
+        if (!input.files.length) return;
+        uploadFiles([...input.files]);
+        input.value = '';
     };
     window._downloadAction = function() {
         if (!currentSelection) return showToast('请先选择子分类');
