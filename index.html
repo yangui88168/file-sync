@@ -636,10 +636,9 @@
         if (currentRole !== 'readonly') {
             const addBtn = document.createElement('button');
             addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
-            // 复用顶部上传按钮的逻辑，确保一致性
             addBtn.onclick = () => {
                 if (!currentSelection) return showToast('请先在左侧选择一个子分类');
-                document.getElementById('uploadBtn').click();
+                document.getElementById('hiddenFileInput').click();
             };
             fv.appendChild(addBtn);
         }
@@ -1111,7 +1110,7 @@
 
     document.getElementById('settingsBtn').addEventListener('click', () => {
         document.getElementById('settingsModal').classList.add('open');
-        syncThemeUI();
+        updateSettingsThemeIcon();
     });
 
     document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
@@ -1332,10 +1331,11 @@
         if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
     });
 
-    function syncThemeUI() {
-        const isDark = document.body.classList.contains('dark');
+    function updateSettingsThemeIcon() {
         const themeToggle = document.getElementById('themeToggleSettings');
-        if (themeToggle) themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        if (!themeToggle) return;
+        const isDark = document.body.classList.contains('dark');
+        themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
     }
 
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -1346,9 +1346,9 @@
         document.body.classList.toggle('dark');
         const isDark = document.body.classList.contains('dark');
         localStorage.setItem('theme', isDark?'dark':'light');
-        syncThemeUI();
+        updateSettingsThemeIcon();
     });
-    syncThemeUI();
+    updateSettingsThemeIcon();
 
     document.getElementById('loginPanel').style.display = 'flex';
 })();
