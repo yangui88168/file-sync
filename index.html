@@ -111,7 +111,23 @@
         @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
         .avatar-img { width:38px; height:38px; border-radius:50%; object-fit:cover; cursor:pointer; }
         .avatar-img-large { width:60px; height:60px; border-radius:50%; object-fit:cover; }
-        .settings-icon { background:none; border:none; cursor:pointer; font-size:1.5rem; color:var(--text); z-index:20; position:relative; }
+        .settings-icon { 
+            background:none; 
+            border:none; 
+            cursor:pointer; 
+            font-size:1.5rem; 
+            color:var(--text); 
+            z-index:20; 
+            position:relative; 
+            padding:0.5rem 0.7rem; 
+            margin:0; 
+            display:flex; 
+            align-items:center; 
+            justify-content:center;
+            border-radius:8px;
+            transition: background 0.2s;
+        }
+        .settings-icon:hover { background:var(--hover); }
         .toast { position:fixed; top:20px; right:20px; background:var(--danger); color:white; padding:0.8rem 1.2rem; border-radius:8px; z-index:3000; opacity:0; transition:opacity 0.3s; }
         .toast.show { opacity:1; }
         @media (max-width:768px) {
@@ -166,7 +182,7 @@
             <button class="toolbar-btn outline" id="exportStructureBtn" onclick="window._exportStructure()" title="仅导出目录结构"><i class="fas fa-file-export"></i> 导出结构</button>
         </div>
         <div class="toolbar-right">
-            <button class="settings-icon" id="settingsBtn" onclick="window._openSettings();return false;" title="设置"><i class="fas fa-cog"></i></button>
+            <button class="settings-icon" id="settingsBtn" onclick="window._openSettings()" title="设置"><i class="fas fa-cog"></i></button>
         </div>
     </div>
     <div class="content-area">
@@ -872,7 +888,6 @@
         } finally {
             updateProgress(0);
             showLoading(false);
-            // 强制重新加载文件系统并刷新视图
             await loadFS();
             if (currentSelection) {
                 const container = getCurrentFS();
@@ -1063,13 +1078,6 @@
     document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
     document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
     document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
-
-    // 设置按钮双重绑定
-    document.getElementById('settingsBtn').addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        window._openSettings();
-    });
 
     // 全局函数
     window._openSettings = function() {
