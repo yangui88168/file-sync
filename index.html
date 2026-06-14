@@ -158,32 +158,32 @@
     <div class="toolbar">
         <div class="toolbar-left">
             <button class="sidebar-toggle" id="sidebarToggle"><i class="fas fa-bars"></i></button>
-            <img id="avatarImg" class="avatar-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23ddd'/%3E%3C/svg%3E" title="个人主页" />
-            <button class="toolbar-btn" id="uploadBtn"><i class="fas fa-upload"></i> 上传</button>
-            <button class="toolbar-btn outline" id="downloadBtn"><i class="fas fa-download"></i> 下载</button>
-            <button class="toolbar-btn outline" id="refreshBtn"><i class="fas fa-sync-alt"></i> 刷新</button>
-            <button class="toolbar-btn outline" id="trashBtn"><i class="fas fa-trash"></i> 回收站</button>
-            <button class="toolbar-btn outline" id="exportStructureBtn" title="仅导出目录结构"><i class="fas fa-file-export"></i> 导出结构</button>
+            <img id="avatarImg" class="avatar-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23ddd'/%3E%3C/svg%3E" title="个人主页" onclick="window._openProfile()" />
+            <button class="toolbar-btn" id="uploadBtn" onclick="window._uploadFile()"><i class="fas fa-upload"></i> 上传</button>
+            <button class="toolbar-btn outline" id="downloadBtn" onclick="window._downloadAction()"><i class="fas fa-download"></i> 下载</button>
+            <button class="toolbar-btn outline" id="refreshBtn" onclick="window._refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="toolbar-btn outline" id="trashBtn" onclick="window._toggleTrash()"><i class="fas fa-trash"></i> 回收站</button>
+            <button class="toolbar-btn outline" id="exportStructureBtn" onclick="window._exportStructure()" title="仅导出目录结构"><i class="fas fa-file-export"></i> 导出结构</button>
         </div>
         <div class="toolbar-right">
-            <button class="settings-icon" id="settingsBtn" title="设置"><i class="fas fa-cog"></i></button>
+            <button class="settings-icon" id="settingsBtn" onclick="window._openSettings()" title="设置"><i class="fas fa-cog"></i></button>
         </div>
     </div>
     <div class="content-area">
         <div class="sidebar" id="sidebar">
             <div class="scope-switch">
-                <button class="scope-tab active" data-scope="public">🌐 公共资料</button>
-                <button class="scope-tab private" data-scope="private">🔒 我的空间</button>
+                <button class="scope-tab active" data-scope="public" onclick="window._switchScope('public')">🌐 公共资料</button>
+                <button class="scope-tab private" data-scope="private" onclick="window._switchScope('private')">🔒 我的空间</button>
             </div>
             <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名或内容..." autocomplete="off">
             <div id="searchResults" class="search-results hidden"></div>
-            <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;">+ 新建文件夹</button>
+            <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;" onclick="window._addFolder()">+ 新建文件夹</button>
             <ul class="tree" id="treeRoot"></ul>
             <div id="trashPanel" class="hidden" style="margin-top:1rem;">
                 <hr style="border-color:var(--border);">
                 <h4 style="display:flex;justify-content:space-between;color:var(--text);">
                     回收站
-                    <button id="emptyTrashBtn" class="toolbar-btn outline" style="font-size:0.7rem;padding:0.2rem 0.5rem;">清空</button>
+                    <button id="emptyTrashBtn" class="toolbar-btn outline" style="font-size:0.7rem;padding:0.2rem 0.5rem;" onclick="window._emptyTrash()">清空</button>
                 </h4>
                 <ul id="trashList" style="list-style:none;color:var(--text);"></ul>
             </div>
@@ -224,12 +224,12 @@
             <div style="display:flex;gap:0.5rem;align-items:center;">
                 <span style="white-space:nowrap;">邀请码：</span>
                 <input type="text" id="myInviteCode" readonly style="flex:1;background:var(--card-bg);border:1px solid var(--border);padding:0.5rem;border-radius:8px;color:var(--text);" />
-                <button class="auth-btn" id="copyInviteBtn" style="width:auto;padding:0.5rem 1rem;">复制</button>
+                <button class="auth-btn" id="copyInviteBtn" onclick="window._copyInviteCode()" style="width:auto;padding:0.5rem 1rem;">复制</button>
             </div>
-            <button class="auth-btn secondary" id="profileChangePasswordBtn">修改密码</button>
-            <button class="auth-btn secondary" id="profileChangeSecondPwdBtn">修改二级密码</button>
-            <button class="auth-btn secondary" id="profileChangeUsernameBtn">修改用户名</button>
-            <button class="auth-btn secondary" id="profileAvatarBtn">修改头像</button>
+            <button class="auth-btn secondary" onclick="window._openPasswordModal()">修改密码</button>
+            <button class="auth-btn secondary" onclick="window._openSecondPwdModal()">修改二级密码</button>
+            <button class="auth-btn secondary" onclick="window._openUsernameModal()">修改用户名</button>
+            <button class="auth-btn secondary" onclick="window._openAvatarModal()">修改头像</button>
         </div>
         <button class="auth-btn secondary" id="closeProfileModal" style="margin-top:1rem;">关闭</button>
     </div>
@@ -241,7 +241,7 @@
         <input type="password" id="oldPassword" placeholder="原密码"><br><br>
         <input type="password" id="newPassword" placeholder="新密码（至少6位）"><br><br>
         <input type="password" id="confirmNewPassword" placeholder="确认新密码"><br><br>
-        <button class="auth-btn" id="updatePasswordBtn">更新密码</button>
+        <button class="auth-btn" onclick="window._updatePassword()">更新密码</button>
         <button class="auth-btn secondary" id="cancelPasswordBtn" style="margin-top:0.5rem;">取消</button>
     </div>
 </div>
@@ -251,7 +251,7 @@
         <input type="password" id="oldSecondPwd" placeholder="原二级密码"><br><br>
         <input type="password" id="newSecondPwd" placeholder="新二级密码（6位数字）" maxlength="6"><br><br>
         <input type="password" id="confirmNewSecondPwd" placeholder="确认新二级密码" maxlength="6"><br><br>
-        <button class="auth-btn" id="updateSecondPwdBtn">更新</button>
+        <button class="auth-btn" onclick="window._updateSecondPwd()">更新</button>
         <button class="auth-btn secondary" id="cancelSecondPwdBtn" style="margin-top:0.5rem;">取消</button>
     </div>
 </div>
@@ -259,7 +259,7 @@
     <div class="modal-content" style="width:400px;">
         <h3>修改用户名</h3>
         <input type="text" id="newUsername" placeholder="新用户名（4-20字符）"><br><br>
-        <button class="auth-btn" id="updateUsernameBtn">更新</button>
+        <button class="auth-btn" onclick="window._updateUsername()">更新</button>
         <button class="auth-btn secondary" id="cancelUsernameBtn" style="margin-top:0.5rem;">取消</button>
     </div>
 </div>
@@ -267,12 +267,12 @@
     <div class="modal-content" style="width:400px;">
         <h3>修改头像</h3>
         <input type="file" id="avatarFileInput" accept="image/*" /><br><br>
-        <button class="auth-btn" id="uploadAvatarBtn">上传头像</button>
+        <button class="auth-btn" onclick="window._uploadAvatar()">上传头像</button>
         <div style="margin-top:1rem;">
             <label>或输入图片 URL</label>
             <input type="text" id="avatarUrl" placeholder="https://example.com/avatar.jpg"><br><br>
-            <button class="auth-btn" id="saveAvatarBtn">保存 URL</button>
-            <button class="auth-btn secondary" id="useGravatarBtn" style="margin-top:0.5rem;">使用 Gravatar</button>
+            <button class="auth-btn" onclick="window._saveAvatarUrl()">保存 URL</button>
+            <button class="auth-btn secondary" onclick="window._useGravatar()" style="margin-top:0.5rem;">使用 Gravatar</button>
         </div>
         <button class="auth-btn secondary" id="cancelAvatarBtn" style="margin-top:1rem;">取消</button>
     </div>
@@ -283,12 +283,12 @@
         <h3><i class="fas fa-cog"></i> 设置</h3>
         <hr style="border-color:var(--border);margin:1rem 0;">
         <div style="display:flex;flex-direction:column;gap:1rem;">
-            <button class="auth-btn secondary" id="openBgSettingsBtn">更换背景</button>
+            <button class="auth-btn secondary" onclick="window._openBgSettings()">更换背景</button>
             <div style="display:flex;justify-content:space-between;align-items:center;">
                 <span>深色模式</span>
-                <button id="themeToggleSettings" class="theme-toggle"><i class="fas fa-moon"></i></button>
+                <button id="themeToggleSettings" class="theme-toggle" onclick="window._toggleTheme()"><i class="fas fa-moon"></i></button>
             </div>
-            <button class="auth-btn secondary" id="settingsLogoutBtn">退出登录</button>
+            <button class="auth-btn secondary" onclick="window._logout()">退出登录</button>
         </div>
         <button class="auth-btn secondary" id="closeSettingsModal" style="margin-top:1rem;">关闭</button>
     </div>
@@ -299,14 +299,14 @@
         <h3>更换背景</h3>
         <label>选择预设背景：</label>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
-            <button class="bg-preset" data-bg="default" style="width:40px;height:40px;border-radius:8px;background:#f0f2f5;border:2px solid var(--border);"></button>
-            <button class="bg-preset" data-bg="gradient1" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></button>
-            <button class="bg-preset" data-bg="gradient2" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"></button>
-            <button class="bg-preset" data-bg="gradient3" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"></button>
+            <button class="bg-preset" data-bg="default" style="width:40px;height:40px;border-radius:8px;background:#f0f2f5;border:2px solid var(--border);" onclick="window._setBg('default')"></button>
+            <button class="bg-preset" data-bg="gradient1" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);" onclick="window._setBg('gradient1')"></button>
+            <button class="bg-preset" data-bg="gradient2" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" onclick="window._setBg('gradient2')"></button>
+            <button class="bg-preset" data-bg="gradient3" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);" onclick="window._setBg('gradient3')"></button>
         </div>
         <label>或输入背景图片 URL：</label>
         <input type="text" id="bgImageUrl" placeholder="https://example.com/bg.jpg"><br><br>
-        <button class="auth-btn" id="saveBgBtn">保存背景</button>
+        <button class="auth-btn" onclick="window._saveBgUrl()">保存背景</button>
         <button class="auth-btn secondary" id="cancelBgBtn" style="margin-top:0.5rem;">取消</button>
     </div>
 </div>
@@ -636,7 +636,7 @@
         if (currentRole !== 'readonly') {
             const addBtn = document.createElement('button');
             addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
-            addBtn.onclick = function() {
+            addBtn.onclick = () => {
                 if (!currentSelection) return showToast('请先在左侧选择一个子分类');
                 document.getElementById('hiddenFileInput').click();
             };
@@ -889,21 +889,6 @@
 
     document.getElementById('sidebarToggle').onclick = () => document.getElementById('sidebar').classList.toggle('open');
 
-    document.querySelectorAll('.scope-tab').forEach(tab => {
-        tab.addEventListener('click', async () => {
-            const newScope = tab.dataset.scope;
-            if (newScope === currentScope) return;
-            currentScope = newScope;
-            document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            currentSelection = null;
-            if (selectMode) toggleSelectMode(false);
-            await loadFS();
-            document.getElementById('fileView').innerHTML = '<h2 style="color:var(--text-secondary);">请选择文件夹</h2>';
-            document.getElementById('trashPanel').classList.add('hidden');
-        });
-    });
-
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
     let searchTimer;
@@ -1060,10 +1045,59 @@
         } catch(e) { showToast(e.message); }
     };
 
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-    document.getElementById('settingsLogoutBtn').addEventListener('click', logout);
+    document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
+    document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
+    document.getElementById('cancelPasswordBtn').addEventListener('click', () => document.getElementById('passwordSubModal').classList.remove('open'));
+    document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => document.getElementById('secondPwdSubModal').classList.remove('open'));
+    document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
+    document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
+    document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
 
-    document.getElementById('addFolderBtn').onclick = async () => {
+    // 暴露全局函数给 onclick 调用
+    window._openSettings = () => {
+        document.getElementById('settingsModal').classList.add('open');
+        updateSettingsThemeIcon();
+    };
+    window._uploadFile = () => {
+        if (!currentSelection) return showToast('请先在左侧选择一个子分类');
+        document.getElementById('hiddenFileInput').click();
+    };
+    window._downloadAction = () => {
+        if (!currentSelection) return showToast('请先选择子分类');
+        if (!selectMode) {
+            toggleSelectMode(true);
+            renderFileView(currentSelection.folder, currentSelection.sub);
+        } else {
+            downloadSelectedFiles();
+        }
+    };
+    window._refresh = () => { if (currentUser) loadFS(); };
+    window._toggleTrash = () => {
+        const panel = document.getElementById('trashPanel');
+        panel.classList.toggle('hidden');
+        if (!panel.classList.contains('hidden')) renderTrash();
+    };
+    window._exportStructure = () => {
+        const container = getCurrentFS();
+        const blob = new Blob([JSON.stringify({ scope: currentScope, folders: container.folders, trash: container.trash }, null, 2)], { type:'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+    };
+    window._switchScope = (scope) => {
+        if (scope === currentScope) return;
+        currentScope = scope;
+        document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active');
+        currentSelection = null;
+        if (selectMode) toggleSelectMode(false);
+        loadFS().then(() => {
+            document.getElementById('fileView').innerHTML = '<h2 style="color:var(--text-secondary);">请选择文件夹</h2>';
+            document.getElementById('trashPanel').classList.add('hidden');
+        });
+    };
+    window._addFolder = async () => {
         if (currentRole === 'readonly') return showToast('只读账户无法创建');
         const name = prompt('新文件夹名称：');
         if (!name || !validName(name)) return showToast('名称无效');
@@ -1072,55 +1106,59 @@
         renderTree();
         try { await saveFS(); } catch(e) { showToast(e.message); }
     };
-
-    document.getElementById('refreshBtn').onclick = async () => { if (currentUser) await loadFS(); };
-
-    document.getElementById('uploadBtn').onclick = () => {
-        if (!currentSelection) return showToast('请先在左侧选择一个子分类');
-        document.getElementById('hiddenFileInput').click();
-    };
-    document.getElementById('hiddenFileInput').onchange = async function () {
-        if (!this.files.length) return;
-        await uploadFiles([...this.files]);
-        this.value = '';
-    };
-
-    document.getElementById('downloadBtn').addEventListener('click', () => {
-        if (!currentSelection) return showToast('请先选择子分类');
-        if (!selectMode) {
-            toggleSelectMode(true);
-            renderFileView(currentSelection.folder, currentSelection.sub);
-        } else {
-            downloadSelectedFiles();
-        }
-    });
-
-    document.getElementById('exportStructureBtn').onclick = () => {
+    window._emptyTrash = async () => {
+        if (currentRole==='readonly') return showToast('只读账户无法清空');
+        if (!confirm('清空回收站将永久删除所有项目，确定？')) return;
         const container = getCurrentFS();
-        const blob = new Blob([JSON.stringify({ scope: currentScope, folders: container.folders, trash: container.trash }, null, 2)], { type:'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`;
-        a.click();
+        const len = container.trash ? container.trash.length : 0;
+        for (let i=len-1; i>=0; i--) {
+            await apiCall('/permanent-delete','POST',{scope: currentScope, index:i});
+        }
+        await loadFS();
+        if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
     };
-
-    document.getElementById('avatarImg').addEventListener('click', () => {
-        document.getElementById('profileModal').classList.add('open');
-    });
-
-    document.getElementById('settingsBtn').addEventListener('click', function() {
-        document.getElementById('settingsModal').classList.add('open');
+    window._copyInviteCode = () => {
+        const code = document.getElementById('myInviteCode').value;
+        if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制'));
+    };
+    window._openPasswordModal = () => document.getElementById('passwordSubModal').classList.add('open');
+    window._openSecondPwdModal = () => document.getElementById('secondPwdSubModal').classList.add('open');
+    window._openUsernameModal = () => document.getElementById('usernameSubModal').classList.add('open');
+    window._openAvatarModal = () => document.getElementById('avatarSubModal').classList.add('open');
+    window._openBgSettings = () => document.getElementById('bgSubModal').classList.add('open');
+    window._logout = () => logout();
+    window._toggleTheme = () => {
+        document.body.classList.toggle('dark');
+        const isDark = document.body.classList.contains('dark');
+        localStorage.setItem('theme', isDark?'dark':'light');
         updateSettingsThemeIcon();
-    });
-
-    document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
-    document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
-
-    document.getElementById('profileChangePasswordBtn').addEventListener('click', () => {
-        document.getElementById('passwordSubModal').classList.add('open');
-    });
-    document.getElementById('cancelPasswordBtn').addEventListener('click', () => document.getElementById('passwordSubModal').classList.remove('open'));
-    document.getElementById('updatePasswordBtn').addEventListener('click', async () => {
+    };
+    window._setBg = (bg) => {
+        userBg = bg;
+        userBgImage = '';
+        localStorage.setItem('userBg', userBg);
+        localStorage.setItem('userBgImage', '');
+        applyBackground();
+        showToast('背景已更新');
+        document.getElementById('bgSubModal').classList.remove('open');
+    };
+    window._saveBgUrl = () => {
+        const url = document.getElementById('bgImageUrl').value.trim();
+        if (url && !url.match(/^https?:\/\//)) {
+            showToast('请输入有效的 HTTP/HTTPS URL');
+            return;
+        }
+        if (url) {
+            userBgImage = url;
+            userBg = '';
+            localStorage.setItem('userBgImage', userBgImage);
+            localStorage.setItem('userBg', '');
+        }
+        applyBackground();
+        showToast('背景已更新');
+        document.getElementById('bgSubModal').classList.remove('open');
+    };
+    window._updatePassword = async () => {
         const oldPwd = document.getElementById('oldPassword').value;
         const newPwd = document.getElementById('newPassword').value;
         const conf = document.getElementById('confirmNewPassword').value;
@@ -1132,13 +1170,8 @@
             showToast('密码已更新');
             document.getElementById('passwordSubModal').classList.remove('open');
         } catch(e) { showToast(e.message); }
-    });
-
-    document.getElementById('profileChangeSecondPwdBtn').addEventListener('click', () => {
-        document.getElementById('secondPwdSubModal').classList.add('open');
-    });
-    document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => document.getElementById('secondPwdSubModal').classList.remove('open'));
-    document.getElementById('updateSecondPwdBtn').addEventListener('click', async () => {
+    };
+    window._updateSecondPwd = async () => {
         const oldS = document.getElementById('oldSecondPwd').value;
         const newS = document.getElementById('newSecondPwd').value;
         const conf = document.getElementById('confirmNewSecondPwd').value;
@@ -1150,13 +1183,8 @@
             showToast('二级密码已更新');
             document.getElementById('secondPwdSubModal').classList.remove('open');
         } catch(e) { showToast(e.message); }
-    });
-
-    document.getElementById('profileChangeUsernameBtn').addEventListener('click', () => {
-        document.getElementById('usernameSubModal').classList.add('open');
-    });
-    document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
-    document.getElementById('updateUsernameBtn').addEventListener('click', async () => {
+    };
+    window._updateUsername = async () => {
         const newName = document.getElementById('newUsername').value.trim();
         if (!newName) return showToast('请输入新用户名');
         try {
@@ -1167,13 +1195,8 @@
             showToast('用户名已更新');
             document.getElementById('usernameSubModal').classList.remove('open');
         } catch(e) { showToast(e.message); }
-    });
-
-    document.getElementById('profileAvatarBtn').addEventListener('click', () => {
-        document.getElementById('avatarSubModal').classList.add('open');
-    });
-    document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
-    document.getElementById('uploadAvatarBtn').addEventListener('click', async () => {
+    };
+    window._uploadAvatar = async () => {
         const file = document.getElementById('avatarFileInput').files[0];
         if (!file) { showToast('请选择图片'); return; }
         if (file.size > 2 * 1024 * 1024) { showToast('头像不能超过2MB'); return; }
@@ -1193,8 +1216,8 @@
             showToast('头像已更新');
         } catch(e) { showToast(e.message); }
         finally { showLoading(false); }
-    });
-    document.getElementById('saveAvatarBtn').addEventListener('click', () => {
+    };
+    window._saveAvatarUrl = () => {
         const url = document.getElementById('avatarUrl').value.trim();
         if (url) {
             document.getElementById('avatarImg').src = url;
@@ -1202,48 +1225,16 @@
             localStorage.setItem('userAvatar', url);
             showToast('头像已更新');
         }
-    });
-    document.getElementById('useGravatarBtn').addEventListener('click', () => {
+    };
+    window._useGravatar = () => {
         if (currentUser?.email) {
             const gravatarUrl = `https://www.gravatar.com/avatar/${currentUser.email}?d=identicon`;
             document.getElementById('avatarUrl').value = gravatarUrl;
         } else {
             showToast('未绑定邮箱，无法使用 Gravatar');
         }
-    });
-
-    document.getElementById('openBgSettingsBtn').addEventListener('click', () => {
-        document.getElementById('bgSubModal').classList.add('open');
-    });
-    document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
-    document.getElementById('saveBgBtn').addEventListener('click', () => {
-        const url = document.getElementById('bgImageUrl').value.trim();
-        if (url && !url.match(/^https?:\/\//)) {
-            showToast('请输入有效的 HTTP/HTTPS URL');
-            return;
-        }
-        if (url) {
-            userBgImage = url;
-            userBg = '';
-            localStorage.setItem('userBgImage', userBgImage);
-            localStorage.setItem('userBg', '');
-        }
-        applyBackground();
-        showToast('背景已更新');
-        document.getElementById('bgSubModal').classList.remove('open');
-    });
-    document.querySelectorAll('.bg-preset').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const bg = btn.dataset.bg;
-            userBg = bg;
-            userBgImage = '';
-            localStorage.setItem('userBg', userBg);
-            localStorage.setItem('userBgImage', '');
-            applyBackground();
-            showToast('背景已更新');
-            document.getElementById('bgSubModal').classList.remove('open');
-        });
-    });
+    };
+    window._openProfile = () => document.getElementById('profileModal').classList.add('open');
 
     function applyBackground() {
         if (userBgImage) {
@@ -1262,13 +1253,6 @@
             document.body.style.setProperty('--body-bg-color', '');
         }
     }
-
-    document.getElementById('copyInviteBtn').addEventListener('click', () => {
-        const code = document.getElementById('myInviteCode').value;
-        if (code) {
-            navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制'));
-        }
-    });
 
     async function renderTrash() {
         const list = document.getElementById('trashList');
@@ -1313,24 +1297,6 @@
         });
     }
 
-    document.getElementById('trashBtn').addEventListener('click', () => {
-        const panel = document.getElementById('trashPanel');
-        panel.classList.toggle('hidden');
-        if (!panel.classList.contains('hidden')) renderTrash();
-    });
-
-    document.getElementById('emptyTrashBtn').addEventListener('click', async () => {
-        if (currentRole==='readonly') return showToast('只读账户无法清空');
-        if (!confirm('清空回收站将永久删除所有项目，确定？')) return;
-        const container = getCurrentFS();
-        const len = container.trash ? container.trash.length : 0;
-        for (let i=len-1; i>=0; i--) {
-            await apiCall('/permanent-delete','POST',{scope: currentScope, index:i});
-        }
-        await loadFS();
-        if (currentSelection) renderFileView(currentSelection.folder, currentSelection.sub);
-    });
-
     function updateSettingsThemeIcon() {
         const themeToggle = document.getElementById('themeToggleSettings');
         if (!themeToggle) return;
@@ -1342,12 +1308,6 @@
     if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) {
         document.body.classList.add('dark');
     }
-    document.getElementById('themeToggleSettings').addEventListener('click', () => {
-        document.body.classList.toggle('dark');
-        const isDark = document.body.classList.contains('dark');
-        localStorage.setItem('theme', isDark?'dark':'light');
-        updateSettingsThemeIcon();
-    });
     updateSettingsThemeIcon();
 
     document.getElementById('loginPanel').style.display = 'flex';
