@@ -636,9 +636,10 @@
         if (currentRole !== 'readonly') {
             const addBtn = document.createElement('button');
             addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
+            // 复用顶部上传按钮的逻辑，确保一致性
             addBtn.onclick = () => {
                 if (!currentSelection) return showToast('请先在左侧选择一个子分类');
-                document.getElementById('hiddenFileInput').click();
+                document.getElementById('uploadBtn').click();
             };
             fv.appendChild(addBtn);
         }
