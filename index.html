@@ -805,8 +805,12 @@
             const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, { headers });
             if (!res.ok) { const err = await res.json(); showToast('无法读取: '+err.error); return; }
             const base64 = await res.text();
+            // 修复中文编码问题
+            const binary = atob(base64);
+            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+            const text = new TextDecoder('utf-8').decode(bytes);
             document.getElementById('editorFileName').textContent = fileName;
-            document.getElementById('editorTextarea').value = atob(base64);
+            document.getElementById('editorTextarea').value = text;
             document.getElementById('editorModal').classList.add('open');
             editorCurrentSub = { folder, sub };
             editorFileName = fileName;
@@ -882,22 +886,15 @@
                 child.files.push({ name: file.name, type:'file', size: file.size, mime: file.type || 'application/octet-stream' });
             }
             await saveFS();
+            showToast('上传成功');
+            await loadFS();
+            renderFileView(folder, sub);
         } catch(e) {
             showToast('上传失败: '+e.message);
             throw e;
         } finally {
             updateProgress(0);
             showLoading(false);
-            await loadFS();
-            if (currentSelection) {
-                const container = getCurrentFS();
-                const newChild = container.folders.find(fd => fd.name === currentSelection.folder)?.children?.find(c => c.name === currentSelection.sub);
-                if (newChild) {
-                    renderFileView(currentSelection.folder, currentSelection.sub);
-                } else {
-                    document.getElementById('fileView').innerHTML = '<h2 style="color:var(--text-secondary);">未找到该分类</h2>';
-                }
-            }
         }
     }
 
@@ -907,6 +904,7 @@
     fileViewEl.addEventListener('dragleave', e => { if (!fileViewEl.contains(e.relatedTarget)) fileViewEl.style.outline = ''; });
     fileViewEl.addEventListener('drop', async e => {
         fileViewEl.style.outline = '';
+        // 修复拖拽上传
         const files = [...e.dataTransfer.files];
         if (files.length) await uploadFiles(files);
     });
@@ -1088,9 +1086,16 @@
         if (!currentSelection) return showToast('请先在左侧选择一个子分类');
         document.getElementById('hiddenFileInput').click();
     };
-    window._handleFileSelect = function(input) {
-        if (!input.files.length) return;
-        uploadFiles([...input.files]);
+    // 修改1：上传按钮处理函数
+    window._handleFileSelect = async function(input) {
+        if (!input.files || !input.files.length) return;
+        try {
+            await uploadFiles([...input.files]);
+            showToast(`上传成功，共 ${input.files.length} 个文件`);
+        } catch (e) {
+            console.error(e);
+            showToast('上传失败：' + e.message);
+        }
         input.value = '';
     };
     window._downloadAction = function() {
