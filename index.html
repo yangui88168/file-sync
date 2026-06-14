@@ -636,7 +636,7 @@
         if (currentRole !== 'readonly') {
             const addBtn = document.createElement('button');
             addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
-            addBtn.onclick = () => {
+            addBtn.onclick = function() {
                 if (!currentSelection) return showToast('请先在左侧选择一个子分类');
                 document.getElementById('hiddenFileInput').click();
             };
@@ -1108,7 +1108,7 @@
         document.getElementById('profileModal').classList.add('open');
     });
 
-    document.getElementById('settingsBtn').addEventListener('click', () => {
+    document.getElementById('settingsBtn').addEventListener('click', function() {
         document.getElementById('settingsModal').classList.add('open');
         updateSettingsThemeIcon();
     });
