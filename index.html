@@ -193,12 +193,11 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 加载遮罩 -->
+    <!-- 加载遮罩/Toast -->
     <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
-    <!-- Toast 消息 -->
     <div class="toast" id="toast"></div>
 
-    <!-- 编辑文件模态框 -->
+    <!-- 所有模态框 -->
     <div class="modal-overlay" id="editorModal">
         <div class="modal-content">
             <h3>编辑文件：<span id="editorFileName" style="color:var(--primary);"></span></h3>
@@ -210,7 +209,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 个人主页模态框 -->
     <div class="modal-overlay" id="profileModal">
         <div class="modal-content" style="width:420px;">
             <div style="text-align:center;"><img id="profileAvatarImg" class="avatar-img-large" src="" /><h3 id="profileUsername" style="margin-top:0.5rem;"></h3></div>
@@ -230,7 +228,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 修改密码模态框 -->
     <div class="modal-overlay" id="passwordSubModal">
         <div class="modal-content" style="width:400px;">
             <h3>修改密码</h3>
@@ -242,7 +239,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 修改二级密码模态框 -->
     <div class="modal-overlay" id="secondPwdSubModal">
         <div class="modal-content" style="width:400px;">
             <h3>修改二级密码</h3>
@@ -254,7 +250,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 修改用户名模态框 -->
     <div class="modal-overlay" id="usernameSubModal">
         <div class="modal-content" style="width:400px;">
             <h3>修改用户名</h3>
@@ -264,7 +259,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 修改头像模态框 -->
     <div class="modal-overlay" id="avatarSubModal">
         <div class="modal-content" style="width:400px;">
             <h3>修改头像</h3>
@@ -280,7 +274,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 设置模态框 -->
     <div class="modal-overlay" id="settingsModal">
         <div class="modal-content" style="width:420px;">
             <h3><i class="fas fa-cog"></i> 设置</h3>
@@ -297,7 +290,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 背景设置模态框 -->
     <div class="modal-overlay" id="bgSubModal">
         <div class="modal-content" style="width:420px;">
             <h3>更换背景</h3>
@@ -318,7 +310,6 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 图片预览模态框 -->
     <div class="modal-overlay" id="previewModal">
         <div class="modal-content" style="text-align:center; background:var(--card-bg);">
             <span id="previewClose" style="position:absolute;right:1rem;top:1rem;cursor:pointer;font-size:1.5rem;color:var(--text);">&times;</span>
@@ -326,886 +317,822 @@ connect-src 'self'
         </div>
     </div>
 
-    <!-- 隐藏的文件选择框 -->
     <input type="file" id="hiddenFileInput" style="display:none;" multiple onchange="window._handleFileSelect(this)">
 
-<script>
-(function () {
-    // ================== 常量与配置 ==================
-    const API_BASE = 'https://lmck.yangui88168.workers.dev';
-    const CHUNK_SIZE = 5 * 1024 * 1024;
-    const MAX_FILE_SIZE = 100 * 1024 * 1024;
-    const MAX_EDIT_SIZE = 500 * 1024;
-    const FETCH_TIMEOUT = 30000;
+    <script>
+    (function () {
+        const API_BASE = 'https://lmck.yangui88168.workers.dev';
+        const CHUNK_SIZE = 5 * 1024 * 1024;
+        const MAX_FILE_SIZE = 100 * 1024 * 1024;
+        const MAX_EDIT_SIZE = 500 * 1024;
+        const FETCH_TIMEOUT = 30000;
 
-    // ================== Token 管理 ==================
-    const TokenManager = {
-        _store: localStorage,
-        getToken() { return this._store.getItem('token'); },
-        setToken(token) { this._store.setItem('token', token); },
-        removeToken() { this._store.removeItem('token'); },
-        getPartialToken() { return this._store.getItem('partialToken'); },
-        setPartialToken(token) { this._store.setItem('partialToken', token); },
-        removePartialToken() { this._store.removeItem('partialToken'); },
-        clear() { this.removeToken(); this.removePartialToken(); }
-    };
+        const TokenManager = {
+            _store: localStorage,
+            getToken() { return this._store.getItem('token'); },
+            setToken(t) { this._store.setItem('token', t); },
+            removeToken() { this._store.removeItem('token'); },
+            getPartialToken() { return this._store.getItem('partialToken'); },
+            setPartialToken(t) { this._store.setItem('partialToken', t); },
+            removePartialToken() { this._store.removeItem('partialToken'); },
+            clear() { this.removeToken(); this.removePartialToken(); }
+        };
 
-    // ================== 工具函数 ==================
-    function showToast(msg) {
-        const toast = document.getElementById('toast');
-        toast.textContent = msg; toast.classList.add('show');
-        clearTimeout(toast._timeout);
-        toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
-    }
-    function sanitizeFileName(name) { return name.replace(/[<>:"|?*\\]/g, '').trim(); }
-    function validName(name, max = 64) { return name && String(name).trim().length > 0 && String(name).length <= max; }
-    function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
-
-    async function fetchWithTimeout(resource, options = {}, timeout = FETCH_TIMEOUT) {
-        const controller = new AbortController();
-        const id = setTimeout(() => controller.abort(), timeout);
-        options.signal = controller.signal;
-        try {
-            const response = await fetch(resource, options);
-            clearTimeout(id);
-            return response;
-        } catch (err) {
-            clearTimeout(id);
-            throw err;
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            clearTimeout(t._timeout);
+            t._timeout = setTimeout(() => t.classList.remove('show'), 3000);
         }
-    }
+        function sanitizeFileName(name) { return name.replace(/[<>:"|?*\\]/g, '').trim(); }
+        function validName(name, max = 64) { return name && String(name).trim().length > 0 && String(name).length <= max; }
+        function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
-    // ================== API 通信 ==================
-    async function apiCall(path, method='GET', body=null) {
-        const token = TokenManager.getToken() || TokenManager.getPartialToken();
-        const headers = { 'Content-Type':'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const options = { method, headers };
-        if (body) options.body = JSON.stringify(body);
-
-        console.log(`[API] ${method} ${path}`, body ? JSON.stringify(body) : '');
-        let res;
-        try {
-            res = await fetchWithTimeout(API_BASE + path, options);
-        } catch (err) {
-            console.error('[API] Network error:', err);
-            throw new Error('网络连接失败或请求超时');
+        async function fetchWithTimeout(resource, options = {}, timeout = FETCH_TIMEOUT) {
+            const ctrl = new AbortController();
+            const id = setTimeout(() => ctrl.abort(), timeout);
+            options.signal = ctrl.signal;
+            try { const res = await fetch(resource, options); clearTimeout(id); return res; }
+            catch (err) { clearTimeout(id); throw err; }
         }
 
-        let data;
-        try {
-            data = await res.json();
-        } catch (e) {
-            const text = await res.text();
-            console.error('[API] Non-JSON response:', text);
-            throw new Error(`服务器响应异常 (${res.status}): ${text.substring(0, 100)}`);
+        async function apiCall(path, method='GET', body=null) {
+            const token = TokenManager.getToken() || TokenManager.getPartialToken();
+            const headers = { 'Content-Type':'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const opts = { method, headers };
+            if (body) opts.body = JSON.stringify(body);
+
+            let res;
+            try { res = await fetchWithTimeout(API_BASE + path, opts); } catch (err) {
+                throw new Error('网络连接失败或请求超时');
+            }
+            let data;
+            try { data = await res.json(); } catch (e) {
+                const text = await res.text();
+                throw new Error(`服务器响应异常 (${res.status}): ${text.substring(0,100)}`);
+            }
+            if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
+            return data;
         }
-        console.log(`[API] Response ${res.status}`, data);
 
-        if (!res.ok) {
-            const msg = data.error || `请求失败 (${res.status})`;
-            console.error(`[API] ${path} 错误:`, msg, data);
-            throw new Error(msg);
+        function showLoading(show=true) { document.getElementById('loadingOverlay').classList.toggle('active', show); }
+
+        let currentUser = null;
+        let currentScope = 'public';
+        let currentSelection = null;
+        let fsData = { public: { folders:[], trash:[] }, private: { folders:[], trash:[] } };
+        let selectMode = false;
+        let selectedFiles = new Set();
+        let userBg = localStorage.getItem('userBg') || '';
+        let userBgImage = localStorage.getItem('userBgImage') || '';
+
+        function isAdmin() { return currentUser && currentUser.role !== 'readonly'; }
+
+        function updateUIByRole() {
+            const canEdit = isAdmin();
+            document.getElementById('uploadBtn').disabled = !canEdit;
+            document.getElementById('addFolderBtn').disabled = !canEdit;
+            const emptyBtn = document.getElementById('emptyTrashBtn');
+            if (emptyBtn) emptyBtn.disabled = !canEdit;
         }
-        return data;
-    }
 
-    function showLoading(show=true) { document.getElementById('loadingOverlay').classList.toggle('active', show); }
-
-    // ================== 全局状态 ==================
-    let currentUser = null;
-    let currentScope = 'public';
-    let currentSelection = null;
-    let fsData = { public: { folders: [], trash: [] }, private: { folders: [], trash: [] } };
-    let selectMode = false;
-    let selectedFiles = new Set();
-    let userBg = localStorage.getItem('userBg') || '';
-    let userBgImage = localStorage.getItem('userBgImage') || '';
-
-    function isAdmin() { return currentUser && currentUser.role !== 'readonly'; }
-
-    function updateUIByRole() {
-        const canEdit = isAdmin();
-        document.getElementById('uploadBtn').disabled = !canEdit;
-        document.getElementById('addFolderBtn').disabled = !canEdit;
-        const emptyBtn = document.getElementById('emptyTrashBtn');
-        if (emptyBtn) emptyBtn.disabled = !canEdit;
-    }
-
-    function updateUserUI() {
-        if (!currentUser) return;
-        document.getElementById('profileUsername').textContent = currentUser.username;
-        document.getElementById('myInviteCode').value = currentUser.inviteCode || '';
-        document.getElementById('avatarImg').src = currentUser.avatar || 'data:image/svg+xml,...';
-        document.getElementById('profileAvatarImg').src = currentUser.avatar || 'data:image/svg+xml,...';
-        updateUIByRole();
-    }
-
-    function logout() {
-        currentUser = null;
-        TokenManager.clear();
-        document.getElementById('mainPanel').classList.remove('active');
-        document.getElementById('loginPanel').style.display = 'flex';
-        document.getElementById('loginStep1').classList.remove('hidden');
-        document.getElementById('loginStep2').classList.add('hidden');
-        showToast('已退出登录');
-    }
-
-    // ================== 文件系统加载 ==================
-    async function loadFS() {
-        showLoading(true);
-        try {
-            const data = await apiCall('/get-fs');
-            const fsRes = data.data || data;
-            fsData = {
-                public: fsRes.public || { folders: [], trash: [] },
-                private: fsRes.private || { folders: [], trash: [] }
-            };
-            renderTree();
-            if (!document.getElementById('trashPanel').classList.contains('hidden')) renderTrash();
+        function updateUserUI() {
+            if (!currentUser) return;
+            document.getElementById('profileUsername').textContent = currentUser.username;
+            document.getElementById('myInviteCode').value = currentUser.inviteCode || '';
+            document.getElementById('avatarImg').src = currentUser.avatar || 'data:image/svg+xml,...';
+            document.getElementById('profileAvatarImg').src = currentUser.avatar || 'data:image/svg+xml,...';
             updateUIByRole();
-        } finally { showLoading(false); }
-    }
-
-    function getCurrentFS() { return currentScope === 'public' ? fsData.public : fsData.private; }
-
-    async function saveFS(container = getCurrentFS()) {
-        const ver = container.version || 1;
-        try {
-            const res = await apiCall('/update-fs', 'PUT', {
-                scope: currentScope,
-                folders: container.folders,
-                trash: container.trash,
-                version: ver
-            });
-            container.version = (res.data && res.data.version) || res.version;
-        } catch (e) {
-            if (e.message.includes('冲突') || e.message.includes('修改')) {
-                showToast('文件已被其他用户修改，正在自动刷新...');
-                await loadFS();
-                if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
-            } else showToast(e.message);
         }
-    }
 
-    function findFolderObj(id) { return getCurrentFS().folders.find(f => f.id === id); }
-    function findSubObj(folderId, subId) {
-        const fo = findFolderObj(folderId);
-        return fo?.children?.find(c => c.id === subId);
-    }
-
-    // ================== 核心删除（404/不存在时自动刷新） ==================
-    async function moveToTrash(type, folderId, subId, fileName) {
-        if (!isAdmin()) return showToast('只读账户无法删除');
-        const params = { scope: currentScope, type, folderId, subId, fileName };
-        console.log('[moveToTrash] 参数：', params);
-        if (!params.scope || !params.type || !params.folderId) {
-            console.error('[moveToTrash] 参数错误，缺失字段', params);
-            return showToast('删除失败：参数不完整，请刷新页面后重试');
-        }
-        try {
-            await apiCall('/move-to-trash', 'POST', params);
-            // 成功则刷新数据
-            await loadFS();
-            if (currentSelection && currentSelection.folderId && currentSelection.subId) {
-                const subExists = findSubObj(currentSelection.folderId, currentSelection.subId);
-                if (subExists) renderFileView(currentSelection.folderId, currentSelection.subId);
-                else document.getElementById('fileView').innerHTML = '';
-            }
-            showToast('已移入回收站');
-        } catch (err) {
-            console.error('[moveToTrash] 请求失败:', err);
-            // 如果错误是“文件夹不存在”之类的404错误，自动刷新界面并提示
-            if (err.message.includes('不存在') || err.message.includes('404') || err.message.includes('未找到')) {
-                await loadFS();
-                showToast('该文件夹可能已被删除，界面已刷新');
-            } else {
-                showToast('删除失败: ' + (err.message || '未知错误'));
-                if (err.message.includes('冲突')) {
-                    await loadFS();
-                    renderTree();
-                }
-            }
-        }
-    }
-
-    // 从 DOM 元素删除文件夹
-    function deleteFolderFromDOM(divElement) {
-        if (!isAdmin()) return showToast('只读账户无法删除');
-        const folderId = divElement.dataset.folderId;
-        const name = divElement.querySelector('span span')?.textContent || '文件夹';
-        if (!folderId) {
-            console.error('[deleteFolder] 无法获取 folderId');
-            return showToast('删除失败：无法获取文件夹ID，请刷新页面后重试');
-        }
-        if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
-        moveToTrash('folder', folderId);
-    }
-
-    // 从 DOM 元素删除子分类
-    function deleteSubFromDOM(liElement) {
-        if (!isAdmin()) return showToast('只读账户无法删除');
-        const folderId = liElement.dataset.folderId;
-        const subId = liElement.dataset.subId;
-        const name = liElement.querySelector('span span')?.textContent || '子分类';
-        if (!folderId || !subId) {
-            console.error('[deleteSub] 无法获取 ID', { folderId, subId });
-            return showToast('删除失败：无法获取ID，请刷新页面后重试');
-        }
-        if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
-        moveToTrash('sub', folderId, subId);
-    }
-
-    // 从 DOM 元素删除文件
-    function deleteFileFromDOM(cardElement, fileName) {
-        if (!isAdmin()) return showToast('只读账户无法删除');
-        const folderId = cardElement.dataset.folderId;
-        const subId = cardElement.dataset.subId;
-        if (!folderId || !subId) {
-            console.error('[deleteFile] 无法获取 ID', { folderId, subId });
-            return showToast('删除失败：无法获取位置信息，请刷新页面后重试');
-        }
-        if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
-        moveToTrash('file', folderId, subId, fileName);
-    }
-
-    // ================== 目录树渲染 ==================
-    function escapeHtml(text) {
-        return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-    }
-    function highlightText(text, keyword) {
-        if (!keyword) return text;
-        const reg = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-        return text.replace(reg, match => `<mark>${match}</mark>`);
-    }
-
-    function renderTree() {
-        const tree = document.getElementById('treeRoot'); tree.innerHTML = '';
-        const container = getCurrentFS(); if (!container.folders) return;
-        const query = document.getElementById('searchInput')?.value?.toLowerCase() || '';
-        container.folders.forEach(folder => {
-            const li = document.createElement('li');
-            const div = document.createElement('div'); div.className = 'folder-item';
-            div.dataset.folderId = folder.id;
-            const locked = folder.hasPassword && (!folder.children || folder.children.length === 0);
-            const chevron = document.createElement('i'); chevron.className = 'fas fa-chevron-right'; chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
-            const nameSpan = document.createElement('span'); nameSpan.style.flex = '1';
-            const icon = document.createElement('i');
-            icon.className = locked ? 'fas fa-lock' : 'fas fa-folder';
-            icon.style.cssText = `margin-right:6px;color:${locked ? '#f59e0b' : (currentScope === 'public' ? '#2563eb' : '#8b5cf6')};`;
-            nameSpan.appendChild(icon);
-            const nameText = document.createElement('span');
-            nameText.innerHTML = highlightText(escapeHtml(sanitizeFileName(folder.name)), query);
-            nameSpan.appendChild(nameText);
-            const actions = document.createElement('div'); actions.className = 'folder-actions';
-            if (isAdmin()) {
-                const keyBtn = document.createElement('button'); keyBtn.title = '密码';
-                keyBtn.innerHTML = '<i class="fas fa-key"></i>';
-                keyBtn.onclick = e => { e.stopPropagation(); setFolderPassword(folder.id); };
-                const renameBtn = document.createElement('button'); renameBtn.title = '重命名';
-                renameBtn.innerHTML = '<i class="fas fa-edit"></i>';
-                renameBtn.onclick = e => { e.stopPropagation(); renameFolder(folder.id, folder.name); };
-                const delBtn = document.createElement('button'); delBtn.title = '删除';
-                delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                delBtn.onclick = e => { e.stopPropagation(); deleteFolderFromDOM(div); };
-                actions.appendChild(keyBtn);
-                actions.appendChild(renameBtn);
-                actions.appendChild(delBtn);
-            }
-            div.appendChild(chevron); div.appendChild(nameSpan); div.appendChild(actions);
-            const sub = document.createElement('ul'); sub.className = 'sub-tree';
-            if (!locked && folder.children) {
-                folder.children.forEach(child => {
-                    const cli = document.createElement('li'); cli.className = 'sub-item';
-                    cli.dataset.folderId = folder.id;
-                    cli.dataset.subId = child.id;
-                    const sn = document.createElement('span'); sn.style.flex='1';
-                    const subIcon = document.createElement('i'); subIcon.className = 'fas fa-folder-open'; subIcon.style.cssText = 'margin-right:6px;color:#64748b;font-size:0.85rem;';
-                    sn.appendChild(subIcon);
-                    const subText = document.createElement('span');
-                    subText.innerHTML = highlightText(escapeHtml(sanitizeFileName(child.name)), query);
-                    sn.appendChild(subText);
-                    const sa = document.createElement('div'); sa.className='sub-item-actions';
-                    if (isAdmin()) {
-                        const rb = document.createElement('button'); rb.innerHTML = '<i class="fas fa-edit"></i>';
-                        rb.onclick = e => { e.stopPropagation(); renameSub(folder.id, child.id, child.name); };
-                        const db = document.createElement('button'); db.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                        db.onclick = e => { e.stopPropagation(); deleteSubFromDOM(cli); };
-                        sa.appendChild(rb); sa.appendChild(db);
-                    }
-                    cli.appendChild(sn); cli.appendChild(sa);
-                    cli.onclick = e => { if (e.target.closest('button')) return; selectSub(folder.id, child.id, cli); };
-                    sub.appendChild(cli);
-                });
-                if (isAdmin()) {
-                    const addBtn = document.createElement('button'); addBtn.className='add-sub-btn'; addBtn.innerHTML='<i class="fas fa-plus"></i> 新建子分类';
-                    addBtn.onclick = e => { e.stopPropagation(); addSubFolder(folder.id); };
-                    sub.appendChild(addBtn);
-                }
-            }
-            div.onclick = async e => {
-                if (e.target.closest('.folder-actions')) return;
-                if (locked) {
-                    const pwd = prompt(`请输入文件夹 "${folder.name}" 的密码：`); if (pwd === null) return;
-                    try {
-                        await apiCall('/verify-folder-password', 'POST', { scope: currentScope, folderId: folder.id, password: pwd });
-                        await loadFS();
-                    } catch { showToast('密码错误'); }
-                } else { sub.classList.toggle('show'); chevron.classList.toggle('fa-rotate-90'); }
-            };
-            li.appendChild(div); li.appendChild(sub); tree.appendChild(li);
-        });
-    }
-
-    function selectSub(folderId, subId, cli) {
-        currentSelection = { folderId, subId };
-        document.querySelectorAll('.sub-item').forEach(el => el.style.background = '');
-        if (cli) cli.style.background = '#dbeafe';
-        if (selectMode) toggleSelectMode(false);
-        renderFileView(folderId, subId);
-        if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
-    }
-
-    // ================== 文件夹/子分类其他操作 ==================
-    async function setFolderPassword(folderId) {
-        const newPwd = prompt(`设置密码（留空=清除）：`); if (newPwd === null) return;
-        await apiCall('/set-folder-password', 'POST', { scope: currentScope, folderId, password: newPwd || '' });
-        await loadFS();
-        showToast(newPwd ? '密码已设置！' : '密码已清除！');
-    }
-    async function renameFolder(folderId, oldName) {
-        if (!isAdmin()) return showToast('只读账户无法重命名');
-        const newName = prompt('新文件夹名称：', oldName); if (!newName || !validName(newName)) return;
-        await apiCall('/rename-folder', 'POST', { scope: currentScope, folderId, newName });
-        const folder = findFolderObj(folderId);
-        if (folder) folder.name = newName;
-        renderTree();
-        if (currentSelection?.folderId === folderId) renderFileView(folderId, currentSelection.subId);
-    }
-    async function renameSub(folderId, subId, oldName) {
-        if (!isAdmin()) return showToast('只读账户无法重命名');
-        const newName = prompt('新子分类名：', oldName); if (!newName || !validName(newName)) return;
-        await apiCall('/rename-sub', 'POST', { scope: currentScope, folderId, subId, newSub: newName });
-        const sub = findSubObj(folderId, subId);
-        if (sub) sub.name = newName;
-        renderTree();
-        if (currentSelection?.folderId === folderId && currentSelection?.subId === subId) renderFileView(folderId, subId);
-    }
-    async function addSubFolder(folderId) {
-        if (!isAdmin()) return showToast('只读账户无法添加');
-        const newName = prompt('子分类名称：'); if (!newName || !validName(newName)) return;
-        const folder = findFolderObj(folderId); if (!folder) return;
-        const newSub = { id: crypto.randomUUID ? crypto.randomUUID() : 'sub_'+Date.now(), name: newName, files: [] };
-        folder.children.push(newSub);
-        await saveFS();
-        renderTree();
-    }
-
-    // ================== 选择模式 ==================
-    function toggleSelectMode(enable) {
-        selectMode = enable;
-        const btn = document.getElementById('downloadBtn');
-        btn.innerHTML = selectMode ? '<i class="fas fa-check"></i> 确认下载' : '<i class="fas fa-download"></i> 下载';
-        document.querySelectorAll('.file-card').forEach(card => {
-            if (selectMode) card.classList.add('selectable'); else card.classList.remove('selectable', 'selected');
-        });
-        selectedFiles.clear();
-    }
-
-    // ================== 文件视图 ==================
-    function renderFileView(folderId, subId) {
-        const child = findSubObj(folderId, subId);
-        const fv = document.getElementById('fileView'); fv.innerHTML = '';
-        if (!child) {
-            const el = document.createElement('h2'); el.style.color = 'var(--text-secondary)'; el.textContent = '未找到该分类';
-            fv.appendChild(el); return;
-        }
-        const folderObj = findFolderObj(folderId);
-        const folderName = folderObj ? folderObj.name : folderId;
-        const subName = child.name;
-        const h2 = document.createElement('h2'); h2.style.cssText = 'margin-bottom:1rem;color:var(--text);';
-        h2.innerHTML = `<i class="fas fa-folder-open" style="margin-right:8px;color:var(--primary);"></i>${subName}`;
-        fv.appendChild(h2);
-        if (isAdmin()) {
-            const addBtn = document.createElement('button'); addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
-            addBtn.onclick = () => window._triggerUpload();
-            fv.appendChild(addBtn);
-        }
-        if (!child.files.length) {
-            fv.appendChild(document.createTextNode('暂无文件，拖拽文件到此处或点击上传'));
-            return;
-        }
-        const grid = document.createElement('div'); grid.className='file-grid';
-        child.files.forEach((f, i) => {
-            const fileName = sanitizeFileName(f.name);
-            const isImage = f.mime?.startsWith('image/');
-            const isPDF = f.mime === 'application/pdf';
-            let iconClass = 'fa-file-alt';
-            if (/\.(png|jpg|jpeg|gif|bmp|svg|webp)$/i.test(fileName) || isImage) iconClass='fa-file-image';
-            else if (/\.(mp4|webm|ogg|mov|avi)$/i.test(fileName)) iconClass='fa-file-video';
-            else if (/\.(mp3|wav|flac|aac)$/i.test(fileName)) iconClass='fa-file-audio';
-            else if (/\.pdf$/i.test(fileName) || isPDF) iconClass='fa-file-pdf';
-            const card = document.createElement('div'); card.className='file-card';
-            card.dataset.folderId = folderId;
-            card.dataset.subId = subId;
-            const fileKey = JSON.stringify({ folderId, subId, fileName });
-            if (selectMode) { card.classList.add('selectable'); if (selectedFiles.has(fileKey)) card.classList.add('selected'); }
-            const checkMark = document.createElement('div'); checkMark.className='check-mark'; checkMark.innerHTML='<i class="fas fa-check"></i>'; card.appendChild(checkMark);
-            if (isAdmin()) {
-                const delBtn = document.createElement('button'); delBtn.className='del-file'; delBtn.textContent='×';
-                delBtn.onclick = async e => {
-                    e.stopPropagation();
-                    deleteFileFromDOM(card, fileName);
-                };
-                card.appendChild(delBtn);
-            }
-            const icon = document.createElement('i'); icon.className=`fas ${iconClass}`; icon.style.cssText='font-size:2rem;display:block;margin:0 auto 0.5rem;color:var(--primary);';
-            const nameEl = document.createElement('span'); nameEl.style.cssText='display:block;word-break:break-all;font-size:0.8rem;color:var(--text);'; nameEl.textContent = fileName;
-            card.appendChild(icon); card.appendChild(nameEl);
-            if (isAdmin() && /\.(txt|md|json|csv|py|js|html|css|log|xml|yaml)$/i.test(fileName) && f.type==='file') {
-                const editBtn = document.createElement('button'); editBtn.textContent='编辑'; editBtn.style.cssText='margin-top:4px;background:none;border:1px solid var(--primary);color:var(--primary);border-radius:4px;padding:2px 8px;font-size:0.78rem;cursor:pointer;';
-                editBtn.onclick = e => { e.stopPropagation(); openEditor(folderName, subName, i, fileName); };
-                card.appendChild(editBtn);
-            }
-            card.addEventListener('click', e => {
-                if (e.target.closest('button')) return;
-                if (selectMode) {
-                    if (selectedFiles.has(fileKey)) { selectedFiles.delete(fileKey); card.classList.remove('selected'); }
-                    else { selectedFiles.add(fileKey); card.classList.add('selected'); }
-                    return;
-                }
-                if (isImage || isPDF) previewFile(folderName, subName, f);
-                else downloadFile(folderName, subName, f);
-            });
-            grid.appendChild(card);
-        });
-        fv.appendChild(grid);
-    }
-
-    // ================== 下载/预览 ==================
-    async function downloadFile(folder, sub, fileObj) {
-        try {
-            const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
-                headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
-            });
-            if (!res.ok) throw new Error('下载失败');
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = sanitizeFileName(fileObj.name);
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch(err) { showToast('下载出错: '+err.message); }
-    }
-    async function downloadSelectedFiles() {
-        if (selectedFiles.size === 0) { showToast('未选择任何文件'); return; }
-        if (selectedFiles.size > 5 && !confirm(`您选择了 ${selectedFiles.size} 个文件，浏览器可能会阻止多个下载。是否继续？`)) return;
-        for (const key of selectedFiles) {
-            const { folderId, subId, fileName } = JSON.parse(key);
-            const folderObj = findFolderObj(folderId);
-            if (!folderObj) continue;
-            const subObj = findSubObj(folderId, subId);
-            if (!subObj) continue;
-            const fileObj = subObj.files.find(f => f.name === fileName);
-            if (fileObj) await downloadFile(folderObj.name, subObj.name, fileObj);
-        }
-        toggleSelectMode(false);
-        if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
-    }
-
-    async function previewFile(folder, sub, fileObj) {
-        try {
-            const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
-                headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
-            });
-            if (!res.ok) throw new Error('预览失败');
-            const blob = await res.blob();
-            if (fileObj.mime?.startsWith('image/')) {
-                document.getElementById('previewImage').src = URL.createObjectURL(blob);
-                document.getElementById('previewModal').classList.add('open');
-            } else {
-                showToast('暂不支持预览该文件');
-            }
-        } catch(e) { showToast('预览失败: ' + e.message); }
-    }
-
-    // ================== 编辑 ==================
-    let editorCurrentSub = null, editorFileName = '';
-    async function openEditor(folder, sub, idx, fileName) {
-        const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, {
-            headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
-        });
-        if (!res.ok) { showToast('无法读取: ' + (await res.json()).error); return; }
-        const text = await res.text();
-        document.getElementById('editorFileName').textContent = fileName;
-        document.getElementById('editorTextarea').value = text;
-        document.getElementById('editorModal').classList.add('open');
-        editorCurrentSub = { folder, sub }; editorFileName = fileName;
-    }
-    document.getElementById('editorSave').addEventListener('click', async () => {
-        const newContent = document.getElementById('editorTextarea').value;
-        if (newContent.length > MAX_EDIT_SIZE) { showToast(`内容过大（${(newContent.length/1024).toFixed(1)}KB），限制 ${MAX_EDIT_SIZE/1024}KB`); return; }
-        if (!editorCurrentSub) return;
-        showLoading(true);
-        await apiCall('/edit-file', 'POST', { scope: currentScope, folder: editorCurrentSub.folder, subFolder: editorCurrentSub.sub, fileName: editorFileName, content: newContent });
-        document.getElementById('editorModal').classList.remove('open');
-        if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
-        showLoading(false);
-    });
-    document.getElementById('editorCancel').addEventListener('click', () => document.getElementById('editorModal').classList.remove('open'));
-
-    // ================== 上传 ==================
-    function updateProgress(percent, statusText = '') {
-        document.getElementById('progressContainer').style.display = percent > 0 ? 'block' : 'none';
-        document.getElementById('progressBar').style.width = percent + '%';
-        document.getElementById('uploadStatus').textContent = statusText;
-    }
-    async function uploadFiles(files) {
-        if (!currentSelection) return showToast('请先选择子分类');
-        if (!isAdmin()) return showToast('只读账户无法上传');
-        const { folderId, subId } = currentSelection;
-        const folderName = findFolderObj(folderId)?.name || folderId;
-        const subName = findSubObj(folderId, subId)?.name || subId;
-        showLoading(true);
-        const uploadId = crypto.randomUUID();
-        let totalProcessed = 0;
-        const totalChunks = files.reduce((sum, file) => sum + Math.ceil(file.size / CHUNK_SIZE), 0);
-        try {
-            for (const file of files) {
-                const safeName = sanitizeFileName(file.name);
-                if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} 超过100MB限制，已跳过`); continue; }
-                const chunks = Math.ceil(file.size / CHUNK_SIZE);
-                for (let j=0; j<chunks; j++) {
-                    const chunk = file.slice(j * CHUNK_SIZE, Math.min((j+1)*CHUNK_SIZE, file.size));
-                    const chunkData = await new Promise((res, rej) => {
-                        const r = new FileReader();
-                        r.onload = () => res(r.result);
-                        r.onerror = () => rej(new Error('文件读取失败'));
-                        r.readAsDataURL(chunk);
-                    });
-                    await apiCall('/upload-chunk', 'POST', {
-                        scope: currentScope, fileName: safeName, folder: folderName,
-                        subFolder: subName, chunkIndex: j, totalChunks: chunks,
-                        data: chunkData.split(',')[1], mime: file.type, uploadId
-                    });
-                    totalProcessed++;
-                    updateProgress(Math.round((totalProcessed / totalChunks) * 100),
-                        `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
-                }
-            }
-            updateProgress(0);
-            showLoading(false);
-            showToast('上传成功');
-            await loadFS();
-            renderFileView(folderId, subId);
-        } catch (e) {
-            console.error('[Upload] 失败:', e);
-            showToast('上传失败: ' + (e.message || '未知错误'));
-        } finally {
-            updateProgress(0);
-            showLoading(false);
-        }
-    }
-
-    // ================== 背景设置 ==================
-    function applyBackground() {
-        if (userBgImage) {
-            document.body.style.setProperty('--body-bg-image', `url(${userBgImage})`);
-            document.body.style.setProperty('--body-bg-color', 'transparent');
-        } else if (userBg && userBg !== 'default') {
-            const gradients = {
-                gradient1:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                gradient2:'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                gradient3:'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
-            };
-            document.body.style.setProperty('--body-bg-image', gradients[userBg] || 'none');
-            document.body.style.setProperty('--body-bg-color', 'transparent');
-        } else {
-            document.body.style.setProperty('--body-bg-image', 'none');
-            document.body.style.setProperty('--body-bg-color', '');
-        }
-    }
-
-    // ================== 回收站渲染 ==================
-    function renderTrash() {
-        const list = document.getElementById('trashList'); list.innerHTML = '';
-        const container = getCurrentFS(); if (!container.trash || !container.trash.length) {
-            const li = document.createElement('li'); li.style.color = 'var(--text-secondary)'; li.textContent = '回收站为空'; list.appendChild(li);
-            return;
-        }
-        container.trash.forEach((item, index) => {
-            const li = document.createElement('li'); li.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;border-bottom:1px solid var(--border);';
-            let label = '';
-            if (item.type === 'folder') label = `📁 ${item.name || item.folder?.name || '未知'}`;
-            else if (item.type === 'sub') label = `📂 ${item.folderName || '未知'}/${item.subName || item.sub?.name || '未知'}`;
-            else if (item.type === 'file') label = `📄 ${item.folderName || '未知'}/${item.subName || '未知'}/${item.file?.name || item.fileName || '未知'}`;
-            const span = document.createElement('span'); span.textContent = label;
-            li.appendChild(span);
-            const actions = document.createElement('span');
-            if (isAdmin()) {
-                const restoreBtn = document.createElement('button'); restoreBtn.innerHTML = '<i class="fas fa-undo"></i>'; restoreBtn.title='恢复'; restoreBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--primary);font-size:1rem;';
-                restoreBtn.onclick = async () => { await apiCall('/restore-from-trash','POST',{scope:currentScope, index}); await loadFS(); };
-                const delBtn = document.createElement('button'); delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>'; delBtn.title='彻底删除'; delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;';
-                delBtn.onclick = async () => { if (!confirm('永久删除不可恢复！')) return; await apiCall('/permanent-delete','POST',{scope:currentScope, index}); await loadFS(); };
-                actions.appendChild(restoreBtn); actions.appendChild(delBtn);
-            }
-            li.appendChild(actions); list.appendChild(li);
-        });
-    }
-
-    // ================== 主题 ==================
-    function updateSettingsThemeIcon() { const btn = document.getElementById('themeToggleSettings'); if (btn) btn.innerHTML = document.body.classList.contains('dark') ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>'; }
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) document.body.classList.add('dark');
-    updateSettingsThemeIcon();
-
-    // ================== 初始化 ==================
-    async function initApp() {
-        const token = TokenManager.getToken();
-        if (!token) {
-            document.getElementById('loginPanel').style.display = 'flex';
-            return;
-        }
-        try {
-            const user = await apiCall('/me');
-            currentUser = user.data || user;
-            updateUserUI();
-            document.getElementById('loginPanel').style.display = 'none';
-            document.getElementById('mainPanel').classList.add('active');
-            await loadFS();
-            applyBackground();
-        } catch (e) {
-            console.error('[Init] 自动登录失败:', e);
+        function logout() {
+            currentUser = null;
             TokenManager.clear();
+            document.getElementById('mainPanel').classList.remove('active');
             document.getElementById('loginPanel').style.display = 'flex';
+            document.getElementById('loginStep1').classList.remove('hidden');
+            document.getElementById('loginStep2').classList.add('hidden');
+            showToast('已退出登录');
         }
-    }
 
-    // ================== 搜索 ==================
-    let searchTimer;
-    document.getElementById('searchInput').addEventListener('input', () => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => {
+        async function loadFS() {
+            showLoading(true);
+            try {
+                const data = await apiCall('/get-fs');
+                const fsRes = data.data || data;
+                fsData = {
+                    public: fsRes.public || { folders:[], trash:[] },
+                    private: fsRes.private || { folders:[], trash:[] }
+                };
+                renderTree();
+                if (!document.getElementById('trashPanel').classList.contains('hidden')) renderTrash();
+                updateUIByRole();
+            } finally { showLoading(false); }
+        }
+
+        function getCurrentFS() { return currentScope === 'public' ? fsData.public : fsData.private; }
+
+        async function saveFS(container = getCurrentFS()) {
+            const ver = container.version || 1;
+            try {
+                const res = await apiCall('/update-fs', 'PUT', {
+                    scope: currentScope,
+                    folders: container.folders,
+                    trash: container.trash,
+                    version: ver
+                });
+                container.version = (res.data && res.data.version) || res.version;
+            } catch (e) {
+                if (e.message.includes('冲突') || e.message.includes('修改')) {
+                    showToast('文件已被其他用户修改，正在自动刷新...');
+                    await loadFS();
+                    if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
+                } else showToast(e.message);
+            }
+        }
+
+        function findFolderObj(id) { return getCurrentFS().folders.find(f => f.id === id); }
+        function findSubObj(folderId, subId) {
+            const fo = findFolderObj(folderId);
+            return fo?.children?.find(c => c.id === subId);
+        }
+
+        // ===== 核心删除：API成功后即时修改本地数据并重绘 =====
+        async function moveToTrash(type, folderId, subId, fileName) {
+            if (!isAdmin()) return showToast('只读账户无法删除');
+            const params = { scope: currentScope, type, folderId, subId, fileName };
+            if (!params.scope || !params.type || !params.folderId) {
+                console.error('参数不完整', params);
+                return showToast('删除参数错误，请刷新后重试');
+            }
+            try {
+                await apiCall('/move-to-trash', 'POST', params);
+                // 服务器成功，立即更新本地数据结构
+                const container = getCurrentFS();
+                if (type === 'folder') {
+                    const idx = container.folders.findIndex(f => f.id === folderId);
+                    if (idx !== -1) {
+                        const removed = container.folders.splice(idx, 1)[0];
+                        container.trash = container.trash || [];
+                        container.trash.push({ type:'folder', folder:removed, deletedAt: Date.now() });
+                    }
+                } else if (type === 'sub') {
+                    const folder = container.folders.find(f => f.id === folderId);
+                    if (folder) {
+                        const idx = folder.children.findIndex(c => c.id === subId);
+                        if (idx !== -1) {
+                            const removed = folder.children.splice(idx, 1)[0];
+                            container.trash.push({ type:'sub', folderId, folderName:folder.name, subId, subName:removed.name, sub:removed, deletedAt: Date.now() });
+                        }
+                    }
+                } else if (type === 'file') {
+                    const folder = container.folders.find(f => f.id === folderId);
+                    if (folder) {
+                        const sub = folder.children.find(c => c.id === subId);
+                        if (sub) {
+                            const idx = sub.files.findIndex(f => f.name === fileName);
+                            if (idx !== -1) {
+                                const removed = sub.files.splice(idx, 1)[0];
+                                container.trash.push({ type:'file', folderId, folderName:folder.name, subId, subName:sub.name, file:removed, deletedAt: Date.now() });
+                            }
+                        }
+                    }
+                }
+                // 立即重绘界面
+                renderTree();
+                if (currentSelection && currentSelection.folderId && currentSelection.subId) {
+                    const subExists = findSubObj(currentSelection.folderId, currentSelection.subId);
+                    if (subExists) renderFileView(currentSelection.folderId, currentSelection.subId);
+                    else document.getElementById('fileView').innerHTML = '';
+                }
+                if (!document.getElementById('trashPanel').classList.contains('hidden')) renderTrash();
+                showToast('已移入回收站');
+            } catch (err) {
+                console.error('删除失败:', err);
+                if (err.message.includes('不存在') || err.message.includes('404') || err.message.includes('未找到')) {
+                    await loadFS();
+                    showToast('该文件夹可能已被删除，界面已刷新');
+                } else {
+                    showToast('删除失败: ' + (err.message || '未知错误'));
+                    if (err.message.includes('冲突')) await loadFS();
+                }
+            }
+        }
+
+        function deleteFolderFromDOM(divEl) {
+            if (!isAdmin()) return showToast('只读账户无法删除');
+            const folderId = divEl.dataset.folderId;
+            const name = divEl.querySelector('span span')?.textContent || '文件夹';
+            if (!folderId) return showToast('无法获取文件夹ID，请刷新');
+            if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
+            moveToTrash('folder', folderId);
+        }
+        function deleteSubFromDOM(liEl) {
+            if (!isAdmin()) return showToast('只读账户无法删除');
+            const folderId = liEl.dataset.folderId;
+            const subId = liEl.dataset.subId;
+            const name = liEl.querySelector('span span')?.textContent || '子分类';
+            if (!folderId || !subId) return showToast('无法获取ID，请刷新');
+            if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
+            moveToTrash('sub', folderId, subId);
+        }
+        function deleteFileFromDOM(cardEl, fileName) {
+            if (!isAdmin()) return showToast('只读账户无法删除');
+            const folderId = cardEl.dataset.folderId;
+            const subId = cardEl.dataset.subId;
+            if (!folderId || !subId) return showToast('无法获取位置信息，请刷新');
+            if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
+            moveToTrash('file', folderId, subId, fileName);
+        }
+
+        // ===== 目录树渲染 =====
+        function escapeHtml(text) { return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+        function highlightText(text, keyword) {
+            if (!keyword) return text;
+            const reg = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            return text.replace(reg, match => `<mark>${match}</mark>`);
+        }
+
+        function renderTree() {
+            const tree = document.getElementById('treeRoot'); tree.innerHTML = '';
+            const container = getCurrentFS(); if (!container.folders) return;
+            const query = document.getElementById('searchInput')?.value?.toLowerCase() || '';
+            container.folders.forEach(folder => {
+                const li = document.createElement('li');
+                const div = document.createElement('div'); div.className = 'folder-item';
+                div.dataset.folderId = folder.id;
+                const locked = folder.hasPassword && (!folder.children || folder.children.length === 0);
+                const chevron = document.createElement('i'); chevron.className = 'fas fa-chevron-right'; chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
+                const nameSpan = document.createElement('span'); nameSpan.style.flex = '1';
+                const icon = document.createElement('i');
+                icon.className = locked ? 'fas fa-lock' : 'fas fa-folder';
+                icon.style.cssText = `margin-right:6px;color:${locked ? '#f59e0b' : (currentScope === 'public' ? '#2563eb' : '#8b5cf6')};`;
+                nameSpan.appendChild(icon);
+                const nameText = document.createElement('span');
+                nameText.innerHTML = highlightText(escapeHtml(sanitizeFileName(folder.name)), query);
+                nameSpan.appendChild(nameText);
+                const actions = document.createElement('div'); actions.className = 'folder-actions';
+                if (isAdmin()) {
+                    const keyBtn = document.createElement('button'); keyBtn.title = '密码';
+                    keyBtn.innerHTML = '<i class="fas fa-key"></i>';
+                    keyBtn.onclick = e => { e.stopPropagation(); setFolderPassword(folder.id); };
+                    const renameBtn = document.createElement('button'); renameBtn.title = '重命名';
+                    renameBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                    renameBtn.onclick = e => { e.stopPropagation(); renameFolder(folder.id, folder.name); };
+                    const delBtn = document.createElement('button'); delBtn.title = '删除';
+                    delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    delBtn.onclick = e => { e.stopPropagation(); deleteFolderFromDOM(div); };
+                    actions.appendChild(keyBtn); actions.appendChild(renameBtn); actions.appendChild(delBtn);
+                }
+                div.appendChild(chevron); div.appendChild(nameSpan); div.appendChild(actions);
+                const sub = document.createElement('ul'); sub.className = 'sub-tree';
+                if (!locked && folder.children) {
+                    folder.children.forEach(child => {
+                        const cli = document.createElement('li'); cli.className = 'sub-item';
+                        cli.dataset.folderId = folder.id; cli.dataset.subId = child.id;
+                        const sn = document.createElement('span'); sn.style.flex='1';
+                        const subIcon = document.createElement('i'); subIcon.className = 'fas fa-folder-open'; subIcon.style.cssText = 'margin-right:6px;color:#64748b;font-size:0.85rem;';
+                        sn.appendChild(subIcon);
+                        const subText = document.createElement('span');
+                        subText.innerHTML = highlightText(escapeHtml(sanitizeFileName(child.name)), query);
+                        sn.appendChild(subText);
+                        const sa = document.createElement('div'); sa.className='sub-item-actions';
+                        if (isAdmin()) {
+                            const rb = document.createElement('button'); rb.innerHTML = '<i class="fas fa-edit"></i>';
+                            rb.onclick = e => { e.stopPropagation(); renameSub(folder.id, child.id, child.name); };
+                            const db = document.createElement('button'); db.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                            db.onclick = e => { e.stopPropagation(); deleteSubFromDOM(cli); };
+                            sa.appendChild(rb); sa.appendChild(db);
+                        }
+                        cli.appendChild(sn); cli.appendChild(sa);
+                        cli.onclick = e => { if (e.target.closest('button')) return; selectSub(folder.id, child.id, cli); };
+                        sub.appendChild(cli);
+                    });
+                    if (isAdmin()) {
+                        const addBtn = document.createElement('button'); addBtn.className='add-sub-btn'; addBtn.innerHTML='<i class="fas fa-plus"></i> 新建子分类';
+                        addBtn.onclick = e => { e.stopPropagation(); addSubFolder(folder.id); };
+                        sub.appendChild(addBtn);
+                    }
+                }
+                div.onclick = async e => {
+                    if (e.target.closest('.folder-actions')) return;
+                    if (locked) {
+                        const pwd = prompt(`请输入文件夹 "${folder.name}" 的密码：`); if (pwd === null) return;
+                        try {
+                            await apiCall('/verify-folder-password', 'POST', { scope: currentScope, folderId: folder.id, password: pwd });
+                            await loadFS();
+                        } catch { showToast('密码错误'); }
+                    } else { sub.classList.toggle('show'); chevron.classList.toggle('fa-rotate-90'); }
+                };
+                li.appendChild(div); li.appendChild(sub); tree.appendChild(li);
+            });
+        }
+
+        function selectSub(folderId, subId, cli) {
+            currentSelection = { folderId, subId };
+            document.querySelectorAll('.sub-item').forEach(el => el.style.background = '');
+            if (cli) cli.style.background = '#dbeafe';
+            if (selectMode) toggleSelectMode(false);
+            renderFileView(folderId, subId);
+            if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+        }
+
+        // ===== 其他操作函数 =====
+        async function setFolderPassword(folderId) {
+            const newPwd = prompt(`设置密码（留空=清除）：`); if (newPwd === null) return;
+            await apiCall('/set-folder-password', 'POST', { scope: currentScope, folderId, password: newPwd || '' });
+            await loadFS();
+            showToast(newPwd ? '密码已设置！' : '密码已清除！');
+        }
+        async function renameFolder(folderId, oldName) {
+            if (!isAdmin()) return showToast('只读账户无法重命名');
+            const newName = prompt('新文件夹名称：', oldName); if (!newName || !validName(newName)) return;
+            await apiCall('/rename-folder', 'POST', { scope: currentScope, folderId, newName });
+            const folder = findFolderObj(folderId);
+            if (folder) folder.name = newName;
             renderTree();
-            const query = document.getElementById('searchInput').value.trim().toLowerCase();
-            if (query) searchFiles(query);
-            else document.getElementById('searchResults').classList.add('hidden');
-        }, 300);
-    });
+            if (currentSelection?.folderId === folderId) renderFileView(folderId, currentSelection.subId);
+        }
+        async function renameSub(folderId, subId, oldName) {
+            if (!isAdmin()) return showToast('只读账户无法重命名');
+            const newName = prompt('新子分类名：', oldName); if (!newName || !validName(newName)) return;
+            await apiCall('/rename-sub', 'POST', { scope: currentScope, folderId, subId, newSub: newName });
+            const sub = findSubObj(folderId, subId);
+            if (sub) sub.name = newName;
+            renderTree();
+            if (currentSelection?.folderId === folderId && currentSelection?.subId === subId) renderFileView(folderId, subId);
+        }
+        async function addSubFolder(folderId) {
+            if (!isAdmin()) return showToast('只读账户无法添加');
+            const newName = prompt('子分类名称：'); if (!newName || !validName(newName)) return;
+            const folder = findFolderObj(folderId); if (!folder) return;
+            const newSub = { id: crypto.randomUUID ? crypto.randomUUID() : 'sub_'+Date.now(), name: newName, files: [] };
+            folder.children.push(newSub);
+            await saveFS();
+            renderTree();
+        }
 
-    function searchFiles(query) {
-        const panel = document.getElementById('searchResults'); panel.innerHTML = '';
-        if (!query) { panel.classList.add('hidden'); return; }
-        const container = getCurrentFS();
-        const results = [];
-        container.folders.forEach(folder => {
-            if (folder.hasPassword && folder.children.length === 0) return;
-            folder.children?.forEach(sub => {
-                sub.files?.forEach(file => {
-                    if (file.name.toLowerCase().includes(query)) results.push({ folderId: folder.id, subId: sub.id, folderName: folder.name, subName: sub.name, fileName: file.name });
+        function toggleSelectMode(enable) {
+            selectMode = enable;
+            const btn = document.getElementById('downloadBtn');
+            btn.innerHTML = selectMode ? '<i class="fas fa-check"></i> 确认下载' : '<i class="fas fa-download"></i> 下载';
+            document.querySelectorAll('.file-card').forEach(card => {
+                if (selectMode) card.classList.add('selectable'); else card.classList.remove('selectable', 'selected');
+            });
+            selectedFiles.clear();
+        }
+
+        function renderFileView(folderId, subId) {
+            const child = findSubObj(folderId, subId);
+            const fv = document.getElementById('fileView'); fv.innerHTML = '';
+            if (!child) {
+                const el = document.createElement('h2'); el.style.color = 'var(--text-secondary)'; el.textContent = '未找到该分类';
+                fv.appendChild(el); return;
+            }
+            const folderObj = findFolderObj(folderId);
+            const folderName = folderObj ? folderObj.name : folderId;
+            const subName = child.name;
+            const h2 = document.createElement('h2'); h2.style.cssText = 'margin-bottom:1rem;color:var(--text);';
+            h2.innerHTML = `<i class="fas fa-folder-open" style="margin-right:8px;color:var(--primary);"></i>${subName}`;
+            fv.appendChild(h2);
+            if (isAdmin()) {
+                const addBtn = document.createElement('button'); addBtn.className = 'toolbar-btn'; addBtn.style.marginBottom='1rem'; addBtn.textContent='+ 上传文件';
+                addBtn.onclick = () => window._triggerUpload();
+                fv.appendChild(addBtn);
+            }
+            if (!child.files.length) {
+                fv.appendChild(document.createTextNode('暂无文件，拖拽文件到此处或点击上传'));
+                return;
+            }
+            const grid = document.createElement('div'); grid.className='file-grid';
+            child.files.forEach((f, i) => {
+                const fileName = sanitizeFileName(f.name);
+                const isImage = f.mime?.startsWith('image/');
+                const isPDF = f.mime === 'application/pdf';
+                let iconClass = 'fa-file-alt';
+                if (/\.(png|jpg|jpeg|gif|bmp|svg|webp)$/i.test(fileName) || isImage) iconClass='fa-file-image';
+                else if (/\.(mp4|webm|ogg|mov|avi)$/i.test(fileName)) iconClass='fa-file-video';
+                else if (/\.(mp3|wav|flac|aac)$/i.test(fileName)) iconClass='fa-file-audio';
+                else if (/\.pdf$/i.test(fileName) || isPDF) iconClass='fa-file-pdf';
+                const card = document.createElement('div'); card.className='file-card';
+                card.dataset.folderId = folderId;
+                card.dataset.subId = subId;
+                const fileKey = JSON.stringify({ folderId, subId, fileName });
+                if (selectMode) { card.classList.add('selectable'); if (selectedFiles.has(fileKey)) card.classList.add('selected'); }
+                const checkMark = document.createElement('div'); checkMark.className='check-mark'; checkMark.innerHTML='<i class="fas fa-check"></i>'; card.appendChild(checkMark);
+                if (isAdmin()) {
+                    const delBtn = document.createElement('button'); delBtn.className='del-file'; delBtn.textContent='×';
+                    delBtn.onclick = async e => {
+                        e.stopPropagation();
+                        deleteFileFromDOM(card, fileName);
+                    };
+                    card.appendChild(delBtn);
+                }
+                const icon = document.createElement('i'); icon.className=`fas ${iconClass}`; icon.style.cssText='font-size:2rem;display:block;margin:0 auto 0.5rem;color:var(--primary);';
+                const nameEl = document.createElement('span'); nameEl.style.cssText='display:block;word-break:break-all;font-size:0.8rem;color:var(--text);'; nameEl.textContent = fileName;
+                card.appendChild(icon); card.appendChild(nameEl);
+                if (isAdmin() && /\.(txt|md|json|csv|py|js|html|css|log|xml|yaml)$/i.test(fileName)) {
+                    const editBtn = document.createElement('button'); editBtn.textContent='编辑'; editBtn.style.cssText='margin-top:4px;background:none;border:1px solid var(--primary);color:var(--primary);border-radius:4px;padding:2px 8px;font-size:0.78rem;cursor:pointer;';
+                    editBtn.onclick = e => { e.stopPropagation(); openEditor(folderName, subName, i, fileName); };
+                    card.appendChild(editBtn);
+                }
+                card.addEventListener('click', e => {
+                    if (e.target.closest('button')) return;
+                    if (selectMode) {
+                        if (selectedFiles.has(fileKey)) { selectedFiles.delete(fileKey); card.classList.remove('selected'); }
+                        else { selectedFiles.add(fileKey); card.classList.add('selected'); }
+                        return;
+                    }
+                    if (isImage || isPDF) previewFile(folderName, subName, f);
+                    else downloadFile(folderName, subName, f);
+                });
+                grid.appendChild(card);
+            });
+            fv.appendChild(grid);
+        }
+
+        // ===== 下载/预览 =====
+        async function downloadFile(folder, sub, fileObj) {
+            try {
+                const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
+                    headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
+                });
+                if (!res.ok) throw new Error('下载失败');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = sanitizeFileName(fileObj.name); a.click();
+                URL.revokeObjectURL(url);
+            } catch(err) { showToast('下载出错: '+err.message); }
+        }
+        async function downloadSelectedFiles() {
+            if (selectedFiles.size === 0) { showToast('未选择任何文件'); return; }
+            if (selectedFiles.size > 5 && !confirm(`您选择了 ${selectedFiles.size} 个文件，浏览器可能会阻止多个下载。是否继续？`)) return;
+            for (const key of selectedFiles) {
+                const { folderId, subId, fileName } = JSON.parse(key);
+                const folderObj = findFolderObj(folderId); if (!folderObj) continue;
+                const subObj = findSubObj(folderId, subId); if (!subObj) continue;
+                const fileObj = subObj.files.find(f => f.name === fileName);
+                if (fileObj) await downloadFile(folderObj.name, subObj.name, fileObj);
+            }
+            toggleSelectMode(false);
+            if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
+        }
+
+        async function previewFile(folder, sub, fileObj) {
+            try {
+                const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
+                    headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
+                });
+                if (!res.ok) throw new Error('预览失败');
+                const blob = await res.blob();
+                if (fileObj.mime?.startsWith('image/')) {
+                    document.getElementById('previewImage').src = URL.createObjectURL(blob);
+                    document.getElementById('previewModal').classList.add('open');
+                } else showToast('暂不支持预览该文件');
+            } catch(e) { showToast('预览失败: ' + e.message); }
+        }
+
+        // ===== 编辑 =====
+        let editorCurrentSub = null, editorFileName = '';
+        async function openEditor(folder, sub, idx, fileName) {
+            const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, {
+                headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
+            });
+            if (!res.ok) { showToast('无法读取: ' + (await res.json()).error); return; }
+            const text = await res.text();
+            document.getElementById('editorFileName').textContent = fileName;
+            document.getElementById('editorTextarea').value = text;
+            document.getElementById('editorModal').classList.add('open');
+            editorCurrentSub = { folder, sub }; editorFileName = fileName;
+        }
+        document.getElementById('editorSave').addEventListener('click', async () => {
+            const newContent = document.getElementById('editorTextarea').value;
+            if (newContent.length > MAX_EDIT_SIZE) { showToast(`内容过大（${(newContent.length/1024).toFixed(1)}KB），限制 ${MAX_EDIT_SIZE/1024}KB`); return; }
+            if (!editorCurrentSub) return;
+            showLoading(true);
+            await apiCall('/edit-file', 'POST', { scope: currentScope, folder: editorCurrentSub.folder, subFolder: editorCurrentSub.sub, fileName: editorFileName, content: newContent });
+            document.getElementById('editorModal').classList.remove('open');
+            if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
+            showLoading(false);
+        });
+        document.getElementById('editorCancel').addEventListener('click', () => document.getElementById('editorModal').classList.remove('open'));
+
+        // ===== 上传 =====
+        function updateProgress(percent, statusText = '') {
+            document.getElementById('progressContainer').style.display = percent > 0 ? 'block' : 'none';
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('uploadStatus').textContent = statusText;
+        }
+        async function uploadFiles(files) {
+            if (!currentSelection) return showToast('请先选择子分类');
+            if (!isAdmin()) return showToast('只读账户无法上传');
+            const { folderId, subId } = currentSelection;
+            const folderName = findFolderObj(folderId)?.name || folderId;
+            const subName = findSubObj(folderId, subId)?.name || subId;
+            showLoading(true);
+            const uploadId = crypto.randomUUID();
+            let totalProcessed = 0;
+            const totalChunks = files.reduce((sum, file) => sum + Math.ceil(file.size / CHUNK_SIZE), 0);
+            try {
+                for (const file of files) {
+                    const safeName = sanitizeFileName(file.name);
+                    if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} 超过100MB限制，已跳过`); continue; }
+                    const chunks = Math.ceil(file.size / CHUNK_SIZE);
+                    for (let j=0; j<chunks; j++) {
+                        const chunk = file.slice(j * CHUNK_SIZE, Math.min((j+1)*CHUNK_SIZE, file.size));
+                        const chunkData = await new Promise((res, rej) => {
+                            const r = new FileReader();
+                            r.onload = () => res(r.result);
+                            r.onerror = () => rej(new Error('文件读取失败'));
+                            r.readAsDataURL(chunk);
+                        });
+                        await apiCall('/upload-chunk', 'POST', {
+                            scope: currentScope, fileName: safeName, folder: folderName,
+                            subFolder: subName, chunkIndex: j, totalChunks: chunks,
+                            data: chunkData.split(',')[1], mime: file.type, uploadId
+                        });
+                        totalProcessed++;
+                        updateProgress(Math.round((totalProcessed / totalChunks) * 100),
+                            `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
+                    }
+                }
+                updateProgress(0);
+                showToast('上传成功');
+                await loadFS();
+                renderFileView(folderId, subId);
+            } catch (e) { showToast('上传失败: ' + (e.message || '未知错误')); }
+            finally { updateProgress(0); showLoading(false); }
+        }
+
+        // ===== 背景 =====
+        function applyBackground() {
+            if (userBgImage) {
+                document.body.style.setProperty('--body-bg-image', `url(${userBgImage})`);
+                document.body.style.setProperty('--body-bg-color', 'transparent');
+            } else if (userBg && userBg !== 'default') {
+                const gradients = {
+                    gradient1:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    gradient2:'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                    gradient3:'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+                };
+                document.body.style.setProperty('--body-bg-image', gradients[userBg] || 'none');
+                document.body.style.setProperty('--body-bg-color', 'transparent');
+            } else {
+                document.body.style.setProperty('--body-bg-image', 'none');
+                document.body.style.setProperty('--body-bg-color', '');
+            }
+        }
+
+        function renderTrash() {
+            const list = document.getElementById('trashList'); list.innerHTML = '';
+            const container = getCurrentFS(); if (!container.trash || !container.trash.length) {
+                const li = document.createElement('li'); li.style.color = 'var(--text-secondary)'; li.textContent = '回收站为空'; list.appendChild(li);
+                return;
+            }
+            container.trash.forEach((item, index) => {
+                const li = document.createElement('li'); li.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;border-bottom:1px solid var(--border);';
+                let label = '';
+                if (item.type === 'folder') label = `📁 ${item.name || item.folder?.name || '未知'}`;
+                else if (item.type === 'sub') label = `📂 ${item.folderName || '未知'}/${item.subName || item.sub?.name || '未知'}`;
+                else if (item.type === 'file') label = `📄 ${item.folderName || '未知'}/${item.subName || '未知'}/${item.file?.name || item.fileName || '未知'}`;
+                const span = document.createElement('span'); span.textContent = label;
+                li.appendChild(span);
+                const actions = document.createElement('span');
+                if (isAdmin()) {
+                    const restoreBtn = document.createElement('button'); restoreBtn.innerHTML = '<i class="fas fa-undo"></i>'; restoreBtn.title='恢复'; restoreBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--primary);font-size:1rem;';
+                    restoreBtn.onclick = async () => { await apiCall('/restore-from-trash','POST',{scope:currentScope, index}); await loadFS(); };
+                    const delBtn = document.createElement('button'); delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>'; delBtn.title='彻底删除'; delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:#dc2626;font-size:1rem;';
+                    delBtn.onclick = async () => { if (!confirm('永久删除不可恢复！')) return; await apiCall('/permanent-delete','POST',{scope:currentScope, index}); await loadFS(); };
+                    actions.appendChild(restoreBtn); actions.appendChild(delBtn);
+                }
+                li.appendChild(actions); list.appendChild(li);
+            });
+        }
+
+        function updateSettingsThemeIcon() { const btn = document.getElementById('themeToggleSettings'); if (btn) btn.innerHTML = document.body.classList.contains('dark') ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>'; }
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) document.body.classList.add('dark');
+        updateSettingsThemeIcon();
+
+        async function initApp() {
+            const token = TokenManager.getToken();
+            if (!token) { document.getElementById('loginPanel').style.display = 'flex'; return; }
+            try {
+                const user = await apiCall('/me');
+                currentUser = user.data || user;
+                updateUserUI();
+                document.getElementById('loginPanel').style.display = 'none';
+                document.getElementById('mainPanel').classList.add('active');
+                await loadFS();
+                applyBackground();
+            } catch (e) {
+                TokenManager.clear();
+                document.getElementById('loginPanel').style.display = 'flex';
+            }
+        }
+
+        // ===== 搜索 =====
+        let searchTimer;
+        document.getElementById('searchInput').addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                renderTree();
+                const query = document.getElementById('searchInput').value.trim().toLowerCase();
+                if (query) searchFiles(query);
+                else document.getElementById('searchResults').classList.add('hidden');
+            }, 300);
+        });
+
+        function searchFiles(query) {
+            const panel = document.getElementById('searchResults'); panel.innerHTML = '';
+            if (!query) { panel.classList.add('hidden'); return; }
+            const container = getCurrentFS();
+            const results = [];
+            container.folders.forEach(folder => {
+                if (folder.hasPassword && folder.children.length === 0) return;
+                folder.children?.forEach(sub => {
+                    sub.files?.forEach(file => {
+                        if (file.name.toLowerCase().includes(query)) results.push({ folderId: folder.id, subId: sub.id, folderName: folder.name, subName: sub.name, fileName: file.name });
+                    });
                 });
             });
-        });
-        if (!results.length) {
-            const div = document.createElement('div'); div.className = 'search-result-item'; div.style.color = 'var(--text-secondary)'; div.textContent = '无匹配文件';
-            panel.appendChild(div); panel.classList.remove('hidden'); return;
+            if (!results.length) {
+                const div = document.createElement('div'); div.className = 'search-result-item'; div.style.color = 'var(--text-secondary)'; div.textContent = '无匹配文件';
+                panel.appendChild(div); panel.classList.remove('hidden'); return;
+            }
+            results.forEach(r => {
+                const div = document.createElement('div'); div.className = 'search-result-item';
+                const nameSpan = document.createElement('span'); nameSpan.innerHTML = `📄 ${highlightText(escapeHtml(r.fileName), query)}`;
+                const pathSpan = document.createElement('span'); pathSpan.className = 'path'; pathSpan.textContent = `${r.folderName}/${r.subName}`;
+                div.appendChild(nameSpan); div.appendChild(pathSpan);
+                div.onclick = () => {
+                    const subItem = document.querySelector(`.sub-item[data-folder-id="${r.folderId}"][data-sub-id="${r.subId}"]`);
+                    if (subItem) subItem.click();
+                    else {
+                        currentSelection = { folderId: r.folderId, subId: r.subId };
+                        document.querySelectorAll('.sub-item').forEach(el => el.style.background = '');
+                        renderFileView(r.folderId, r.subId);
+                    }
+                    panel.classList.add('hidden');
+                };
+                panel.appendChild(div);
+            });
+            panel.classList.remove('hidden');
         }
-        results.forEach(r => {
-            const div = document.createElement('div'); div.className = 'search-result-item';
-            const nameSpan = document.createElement('span'); nameSpan.innerHTML = `📄 ${highlightText(escapeHtml(r.fileName), query)}`;
-            const pathSpan = document.createElement('span'); pathSpan.className = 'path'; pathSpan.textContent = `${r.folderName}/${r.subName}`;
-            div.appendChild(nameSpan); div.appendChild(pathSpan);
-            div.onclick = () => {
-                const subItem = document.querySelector(`.sub-item[data-folder-id="${r.folderId}"][data-sub-id="${r.subId}"]`);
-                if (subItem) subItem.click();
-                else {
-                    currentSelection = { folderId: r.folderId, subId: r.subId };
-                    document.querySelectorAll('.sub-item').forEach(el => el.style.background = '');
-                    renderFileView(r.folderId, r.subId);
-                }
-                panel.classList.add('hidden');
-            };
-            panel.appendChild(div);
-        });
-        panel.classList.remove('hidden');
-    }
 
-    // ================== 全局暴露函数 ==================
-    window._handleFileSelect = async function(input) { if (!input.files?.length) return; await uploadFiles(Array.from(input.files)); input.value = ''; };
-    window._triggerUpload = function() { if (!currentSelection) return showToast('请先选择子分类'); document.getElementById('hiddenFileInput').click(); };
-    window._downloadAction = function() { if (!currentSelection) return showToast('请先选择子分类'); if (!selectMode) { toggleSelectMode(true); renderFileView(currentSelection.folderId, currentSelection.subId); } else downloadSelectedFiles(); };
-    window._refresh = function() { loadFS(); };
-    window._toggleTrash = function() { const p = document.getElementById('trashPanel'); p.classList.toggle('hidden'); if (!p.classList.contains('hidden')) renderTrash(); };
-    window._exportStructure = function() { const c = getCurrentFS(); const blob = new Blob([JSON.stringify({ scope: currentScope, folders: c.folders, trash: c.trash }, null, 2)], { type:'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
-    window._switchScope = function(scope) { if (scope === currentScope) return; currentScope = scope; document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active')); document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active'); currentSelection = null; if (selectMode) toggleSelectMode(false); loadFS().then(() => { document.getElementById('fileView').innerHTML = ''; document.getElementById('trashPanel').classList.add('hidden'); }); };
-    window._addFolder = async function() { if (!isAdmin()) return showToast('只读账户无法创建'); const name = prompt('新文件夹名称：'); if (!name||!validName(name)) return showToast('名称无效'); const c = getCurrentFS(); c.folders.push({ id: crypto.randomUUID(), name, passwordHash:'', passwordSalt:'', children:[] }); renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); } };
-    window._emptyTrash = async function() { if (!isAdmin()) return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; await apiCall('/empty-trash', 'POST', { scope: currentScope }); await loadFS(); };
-    window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
-    window._openSettings = function() { document.getElementById('settingsModal').classList.add('open'); updateSettingsThemeIcon(); };
-    window._openProfile = function() { document.getElementById('profileModal').classList.add('open'); };
-    window._openPasswordModal = function() { document.getElementById('passwordSubModal').classList.add('open'); };
-    window._openSecondPwdModal = function() { document.getElementById('secondPwdSubModal').classList.add('open'); };
-    window._openUsernameModal = function() { document.getElementById('usernameSubModal').classList.add('open'); };
-    window._openAvatarModal = function() { document.getElementById('avatarSubModal').classList.add('open'); };
-    window._openBgSettings = function() { document.getElementById('bgSubModal').classList.add('open'); };
-    window._logout = function() { logout(); };
-    window._toggleTheme = function() { document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); updateSettingsThemeIcon(); };
-    window._setBg = function(bg) { userBg = bg; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
-    window._uploadBackground = async function() {
-        const file = document.getElementById('backgroundUpload').files[0];
-        if (!file) return showToast('请选择背景图片');
-        if (file.size > 2 * 1024 * 1024) return showToast('背景图片不能超过2MB');
-        const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-        if (!allowedTypes.includes(file.type)) return showToast('仅支持 PNG、JPEG、WebP、GIF 格式');
-        showLoading(true);
-        try {
-            const reader = new FileReader();
-            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-            const res = await apiCall('/upload-background', 'POST', { data: dataUrl.split(',')[1], mime: file.type });
-            userBgImage = res.data.backgroundUrl || res.backgroundUrl;
-            userBg = '';
-            localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', '');
-            applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open');
-        } catch(e) { showToast('上传失败: '+e.message); } finally { showLoading(false); }
-    };
-    window._resetBackground = function() { userBg = 'default'; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已重置'); };
-    window._updatePassword = async function() {
-        const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value;
-        if (!oldPwd||!newPwd) return showToast('请填写完整'); if (newPwd.length<6) return showToast('新密码至少6位'); if (newPwd!==conf) return showToast('两次输入不一致');
-        try { await apiCall('/update-profile','POST',{oldPassword:oldPwd,newPassword:newPwd}); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
-    };
-    window._updateSecondPwd = async function() {
-        const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value;
-        if (!oldS||!newS) return showToast('请填写完整'); if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字'); if (newS!==conf) return showToast('两次输入不一致');
-        try { await apiCall('/update-profile','POST',{oldSecondPassword:oldS,newSecondPassword:newS}); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
-    };
-    window._updateUsername = async function() {
-        const newName = document.getElementById('newUsername').value.trim();
-        if (!newName) return showToast('请输入新用户名');
-        try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); const token = res.data?.token || res.token; if (token) TokenManager.setToken(token); currentUser.username = res.data?.newUsername || res.newUsername; document.getElementById('profileUsername').textContent = currentUser.username; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
-    };
-    window._uploadAvatar = async function() {
-        const file = document.getElementById('avatarFileInput').files[0];
-        if (!file) return showToast('请选择头像图片');
-        if (file.size > 500 * 1024) return showToast('头像图片不能超过500KB');
-        showLoading(true);
-        try {
-            const reader = new FileReader();
-            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-            const res = await apiCall('/upload-avatar','POST',{ data:dataUrl.split(',')[1], mime:file.type });
-            currentUser.avatar = res.data?.avatarUrl || res.avatarUrl;
-            document.getElementById('avatarImg').src = currentUser.avatar;
-            document.getElementById('profileAvatarImg').src = currentUser.avatar;
-            showToast('头像已更新');
-        } catch(e) { showToast(e.message); } finally { showLoading(false); }
-    };
-    window._saveAvatarUrl = async function() {
-        try {
-            const url = document.getElementById('avatarUrl').value.trim();
-            if (!/^https?:\/\//i.test(url)) { showToast('仅允许http或https图片地址'); return; }
-            currentUser.avatar = url;
-            document.getElementById('avatarImg').src = url;
-            document.getElementById('profileAvatarImg').src = url;
-            localStorage.setItem('user_avatar', url);
-            showToast('头像已更新');
-        } catch(err) { showToast(err.message); }
-    };
-    window._useGravatar = function() {
-        if (currentUser?.email) {
-            const email = currentUser.email.trim().toLowerCase();
-            const hash = md5(email);
-            document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${hash}?d=identicon`;
-        } else { showToast('未绑定邮箱'); }
-    };
+        // ===== 全局暴露 =====
+        window._handleFileSelect = async function(input) { if (!input.files?.length) return; await uploadFiles(Array.from(input.files)); input.value = ''; };
+        window._triggerUpload = function() { if (!currentSelection) return showToast('请先选择子分类'); document.getElementById('hiddenFileInput').click(); };
+        window._downloadAction = function() { if (!currentSelection) return showToast('请先选择子分类'); if (!selectMode) { toggleSelectMode(true); renderFileView(currentSelection.folderId, currentSelection.subId); } else downloadSelectedFiles(); };
+        window._refresh = function() { loadFS(); };
+        window._toggleTrash = function() { const p = document.getElementById('trashPanel'); p.classList.toggle('hidden'); if (!p.classList.contains('hidden')) renderTrash(); };
+        window._exportStructure = function() { const c = getCurrentFS(); const blob = new Blob([JSON.stringify({ scope: currentScope, folders: c.folders, trash: c.trash }, null, 2)], { type:'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
+        window._switchScope = function(scope) { if (scope === currentScope) return; currentScope = scope; document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active')); document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active'); currentSelection = null; if (selectMode) toggleSelectMode(false); loadFS().then(() => { document.getElementById('fileView').innerHTML = ''; document.getElementById('trashPanel').classList.add('hidden'); }); };
+        window._addFolder = async function() { if (!isAdmin()) return showToast('只读账户无法创建'); const name = prompt('新文件夹名称：'); if (!name||!validName(name)) return showToast('名称无效'); const c = getCurrentFS(); c.folders.push({ id: crypto.randomUUID(), name, passwordHash:'', passwordSalt:'', children:[] }); renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); } };
+        window._emptyTrash = async function() { if (!isAdmin()) return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; await apiCall('/empty-trash', 'POST', { scope: currentScope }); await loadFS(); };
+        window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
+        window._openSettings = function() { document.getElementById('settingsModal').classList.add('open'); updateSettingsThemeIcon(); };
+        window._openProfile = function() { document.getElementById('profileModal').classList.add('open'); };
+        window._openPasswordModal = function() { document.getElementById('passwordSubModal').classList.add('open'); };
+        window._openSecondPwdModal = function() { document.getElementById('secondPwdSubModal').classList.add('open'); };
+        window._openUsernameModal = function() { document.getElementById('usernameSubModal').classList.add('open'); };
+        window._openAvatarModal = function() { document.getElementById('avatarSubModal').classList.add('open'); };
+        window._openBgSettings = function() { document.getElementById('bgSubModal').classList.add('open'); };
+        window._logout = function() { logout(); };
+        window._toggleTheme = function() { document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); updateSettingsThemeIcon(); };
+        window._setBg = function(bg) { userBg = bg; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
+        window._uploadBackground = async function() {
+            const file = document.getElementById('backgroundUpload').files[0];
+            if (!file) return showToast('请选择背景图片');
+            if (file.size > 2 * 1024 * 1024) return showToast('背景图片不能超过2MB');
+            const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+            if (!allowedTypes.includes(file.type)) return showToast('仅支持 PNG、JPEG、WebP、GIF 格式');
+            showLoading(true);
+            try {
+                const reader = new FileReader();
+                const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
+                const res = await apiCall('/upload-background', 'POST', { data: dataUrl.split(',')[1], mime: file.type });
+                userBgImage = res.data.backgroundUrl || res.backgroundUrl;
+                userBg = '';
+                localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', '');
+                applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open');
+            } catch(e) { showToast('上传失败: '+e.message); } finally { showLoading(false); }
+        };
+        window._resetBackground = function() { userBg = 'default'; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已重置'); };
+        window._updatePassword = async function() {
+            const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value;
+            if (!oldPwd||!newPwd) return showToast('请填写完整'); if (newPwd.length<6) return showToast('新密码至少6位'); if (newPwd!==conf) return showToast('两次输入不一致');
+            try { await apiCall('/update-profile','POST',{oldPassword:oldPwd,newPassword:newPwd}); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+        };
+        window._updateSecondPwd = async function() {
+            const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value;
+            if (!oldS||!newS) return showToast('请填写完整'); if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字'); if (newS!==conf) return showToast('两次输入不一致');
+            try { await apiCall('/update-profile','POST',{oldSecondPassword:oldS,newSecondPassword:newS}); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+        };
+        window._updateUsername = async function() {
+            const newName = document.getElementById('newUsername').value.trim();
+            if (!newName) return showToast('请输入新用户名');
+            try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); const token = res.data?.token || res.token; if (token) TokenManager.setToken(token); currentUser.username = res.data?.newUsername || res.newUsername; document.getElementById('profileUsername').textContent = currentUser.username; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+        };
+        window._uploadAvatar = async function() {
+            const file = document.getElementById('avatarFileInput').files[0];
+            if (!file) return showToast('请选择头像图片');
+            if (file.size > 500 * 1024) return showToast('头像图片不能超过500KB');
+            showLoading(true);
+            try {
+                const reader = new FileReader();
+                const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
+                const res = await apiCall('/upload-avatar','POST',{ data:dataUrl.split(',')[1], mime:file.type });
+                currentUser.avatar = res.data?.avatarUrl || res.avatarUrl;
+                document.getElementById('avatarImg').src = currentUser.avatar;
+                document.getElementById('profileAvatarImg').src = currentUser.avatar;
+                showToast('头像已更新');
+            } catch(e) { showToast(e.message); } finally { showLoading(false); }
+        };
+        window._saveAvatarUrl = async function() {
+            try {
+                const url = document.getElementById('avatarUrl').value.trim();
+                if (!/^https?:\/\//i.test(url)) { showToast('仅允许http或https图片地址'); return; }
+                currentUser.avatar = url;
+                document.getElementById('avatarImg').src = url;
+                document.getElementById('profileAvatarImg').src = url;
+                localStorage.setItem('user_avatar', url);
+                showToast('头像已更新');
+            } catch(err) { showToast(err.message); }
+        };
+        window._useGravatar = function() {
+            if (currentUser?.email) {
+                const email = currentUser.email.trim().toLowerCase();
+                const hash = md5(email);
+                document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${hash}?d=identicon`;
+            } else { showToast('未绑定邮箱'); }
+        };
 
-    // ================== 登录流程 ==================
-    let loginLock = false;
-    document.getElementById('loginNextBtn').onclick = async function() {
-        if (loginLock) return;
-        const acc = document.getElementById('loginUsername').value.trim();
-        const pwd = document.getElementById('loginPassword').value;
-        if (!acc || !pwd) return showToast('请填写账号和密码');
+        // ===== 登录流程 =====
+        let loginLock = false;
+        document.getElementById('loginNextBtn').onclick = async function() {
+            if (loginLock) return;
+            const acc = document.getElementById('loginUsername').value.trim();
+            const pwd = document.getElementById('loginPassword').value;
+            if (!acc || !pwd) return showToast('请填写账号和密码');
+            loginLock = true; this.disabled = true;
+            try {
+                const res = await apiCall('/login', 'POST', { username: acc, password: pwd });
+                const partialToken = res.data?.partialToken || res.partialToken;
+                TokenManager.setPartialToken(partialToken);
+                document.getElementById('loginAccountDisplay').textContent = res.data?.username || res.username;
+                document.getElementById('loginStep1').classList.add('hidden');
+                document.getElementById('loginStep2').classList.remove('hidden');
+            } catch (e) { showToast(e.message || '登录失败'); }
+            finally { loginLock = false; this.disabled = false; }
+        };
 
-        loginLock = true;
-        this.disabled = true;
-        try {
-            const res = await apiCall('/login', 'POST', { username: acc, password: pwd });
-            const partialToken = res.data?.partialToken || res.partialToken;
-            TokenManager.setPartialToken(partialToken);
-            document.getElementById('loginAccountDisplay').textContent = res.data?.username || res.username;
-            document.getElementById('loginStep1').classList.add('hidden');
-            document.getElementById('loginStep2').classList.remove('hidden');
-        } catch (e) {
-            showToast(e.message || '登录失败');
-        } finally {
-            loginLock = false;
-            this.disabled = false;
-        }
-    };
+        document.getElementById('loginConfirmBtn').onclick = async function() {
+            if (loginLock) return;
+            const sp = document.getElementById('loginSecondPwd').value.trim();
+            if (!/^\d{6}$/.test(sp)) return showToast('请输入6位数字');
+            loginLock = true; this.disabled = true;
+            try {
+                const data = await apiCall('/verify-second-password', 'POST', { secondPassword: sp });
+                const fullToken = data.data?.token || data.token;
+                TokenManager.setToken(fullToken);
+                TokenManager.removePartialToken();
+                const userInfo = data.data || data;
+                currentUser = { username: userInfo.username, email: userInfo.email, role: userInfo.role, inviteCode: userInfo.inviteCode, avatar: userInfo.avatar };
+                document.getElementById('loginPanel').style.display = 'none';
+                document.getElementById('mainPanel').classList.add('active');
+                updateUserUI();
+                loadFS();
+                applyBackground();
+            } catch (e) { showToast(e.message || '登录失败'); }
+            finally { loginLock = false; this.disabled = false; }
+        };
 
-    document.getElementById('loginConfirmBtn').onclick = async function() {
-        if (loginLock) return;
-        const sp = document.getElementById('loginSecondPwd').value.trim();
-        if (!/^\d{6}$/.test(sp)) return showToast('请输入6位数字');
+        document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
+        document.getElementById('goLogin').onclick = () => { document.getElementById('registerPanel').style.display='none'; document.getElementById('loginPanel').style.display='flex'; };
+        document.getElementById('loginBackBtn').onclick = () => { document.getElementById('loginStep2').classList.add('hidden'); document.getElementById('loginStep1').classList.remove('hidden'); TokenManager.removePartialToken(); };
+        document.getElementById('registerBtn').onclick = async () => {
+            const u = document.getElementById('regUsername').value.trim(), em = document.getElementById('regEmail').value.trim(), p = document.getElementById('regPassword').value, cp = document.getElementById('regConfirmPwd').value, sp = document.getElementById('regSecondPwd').value.trim(), csp = document.getElementById('regConfirmSecondPwd').value.trim(), inv = document.getElementById('inviteCode').value.trim();
+            if (u.length<4||u.length>20) return showToast('用户名4-20字符'); if (em && !validEmail(em)) return showToast('邮箱格式不正确');
+            if (p.length<6) return showToast('密码至少6位'); if (p!==cp) return showToast('两次密码不一致');
+            if (!/^\d{6}$/.test(sp)) return showToast('二级密码需6位数字'); if (sp!==csp) return showToast('两次二级密码不一致'); if (!inv) return showToast('请输入邀请码');
+            try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.data?.inviteCode || res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
+        };
 
-        loginLock = true;
-        this.disabled = true;
-        try {
-            const data = await apiCall('/verify-second-password', 'POST', { secondPassword: sp });
-            const fullToken = data.data?.token || data.token;
-            TokenManager.setToken(fullToken);
-            TokenManager.removePartialToken();
-            const userInfo = data.data || data;
-            currentUser = {
-                username: userInfo.username,
-                email: userInfo.email,
-                role: userInfo.role,
-                inviteCode: userInfo.inviteCode,
-                avatar: userInfo.avatar
-            };
-            document.getElementById('loginPanel').style.display = 'none';
-            document.getElementById('mainPanel').classList.add('active');
-            updateUserUI();
-            loadFS();
-            applyBackground();
-        } catch (e) {
-            showToast(e.message || '登录失败');
-        } finally {
-            loginLock = false;
-            this.disabled = false;
-        }
-    };
+        // 关闭模态框
+        document.getElementById('previewClose').addEventListener('click', () => document.getElementById('previewModal').classList.remove('open'));
+        document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
+        document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
+        document.getElementById('cancelPasswordBtn').addEventListener('click', () => document.getElementById('passwordSubModal').classList.remove('open'));
+        document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => document.getElementById('secondPwdSubModal').classList.remove('open'));
+        document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
+        document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
+        document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
+        document.getElementById('sidebarToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
 
-    document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
-    document.getElementById('goLogin').onclick = () => { document.getElementById('registerPanel').style.display='none'; document.getElementById('loginPanel').style.display='flex'; };
-    document.getElementById('loginBackBtn').onclick = () => { document.getElementById('loginStep2').classList.add('hidden'); document.getElementById('loginStep1').classList.remove('hidden'); TokenManager.removePartialToken(); };
-    document.getElementById('registerBtn').onclick = async () => {
-        const u = document.getElementById('regUsername').value.trim(), em = document.getElementById('regEmail').value.trim(), p = document.getElementById('regPassword').value, cp = document.getElementById('regConfirmPwd').value, sp = document.getElementById('regSecondPwd').value.trim(), csp = document.getElementById('regConfirmSecondPwd').value.trim(), inv = document.getElementById('inviteCode').value.trim();
-        if (u.length<4||u.length>20) return showToast('用户名4-20字符'); if (em && !validEmail(em)) return showToast('邮箱格式不正确');
-        if (p.length<6) return showToast('密码至少6位'); if (p!==cp) return showToast('两次密码不一致');
-        if (!/^\d{6}$/.test(sp)) return showToast('二级密码需6位数字'); if (sp!==csp) return showToast('两次二级密码不一致'); if (!inv) return showToast('请输入邀请码');
-        try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.data?.inviteCode || res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
-    };
-
-    // 关闭模态框事件
-    document.getElementById('previewClose').addEventListener('click', () => document.getElementById('previewModal').classList.remove('open'));
-    document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
-    document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
-    document.getElementById('cancelPasswordBtn').addEventListener('click', () => document.getElementById('passwordSubModal').classList.remove('open'));
-    document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => document.getElementById('secondPwdSubModal').classList.remove('open'));
-    document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
-    document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
-    document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
-
-    // 侧边栏切换
-    document.getElementById('sidebarToggle').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.toggle('open');
-    });
-
-    // 启动应用
-    initApp();
-})();
-</script>
+        initApp();
+    })();
+    </script>
 </body>
 </html>
