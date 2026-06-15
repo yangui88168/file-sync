@@ -76,7 +76,6 @@
         .search-result-item { padding:0.4rem 0.6rem; cursor:pointer; border-bottom:1px solid var(--border); font-size:0.8rem; }
         .search-result-item:hover { background:var(--hover); }
         .search-result-item .path { color:var(--text-secondary); font-size:0.7rem; }
-        .search-result-item .context { color:var(--text-secondary); font-size:0.7rem; font-style:italic; }
         .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:1000; }
         .modal-overlay.open { display:flex; }
         .modal-content { background:var(--card-bg); border-radius:16px; padding:2rem; width:600px; max-width:90%; max-height:80vh; overflow-y:auto; position:relative; }
@@ -148,7 +147,7 @@
                 <button class="scope-tab active" data-scope="public" onclick="window._switchScope('public')">🌐 公共资料</button>
                 <button class="scope-tab private" data-scope="private" onclick="window._switchScope('private')">🔒 我的空间</button>
             </div>
-            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名..." autocomplete="off">
+            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名" autocomplete="off">
             <div id="searchResults" class="search-results hidden"></div>
             <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;" onclick="window._addFolder()">+ 新建文件夹</button>
             <ul class="tree" id="treeRoot"></ul>
@@ -292,6 +291,8 @@
     const MAX_FILE_SIZE = 100 * 1024 * 1024;
     const MAX_EDIT_SIZE = 500 * 1024;
     const MAX_RETRIES = 3;
+    const DIRECT_DOWNLOAD_THRESHOLD = 10 * 1024 * 1024; // 超过10MB直接用URL下载
+    const BATCH_DOWNLOAD_WARNING = 5;
 
     let authToken = sessionStorage.getItem('authToken') || null;
     let partialToken = null, currentUser = null, currentRole = '';
@@ -599,6 +600,15 @@
     }
 
     async function downloadFile(folder, sub, fileObj) {
+        const fileSize = fileObj.size || 0;
+        if (fileSize > DIRECT_DOWNLOAD_THRESHOLD && authToken) {
+            const url = `${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}&token=${encodeURIComponent(authToken)}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileObj.name;
+            a.click();
+            return;
+        }
         try {
             const headers = { 'Content-Type':'application/json' }; if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
             const url = `${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`;
@@ -613,7 +623,11 @@
     }
     async function downloadSelectedFiles() {
         if (selectedFiles.size === 0) { showToast('未选择任何文件'); return; }
+        if (selectedFiles.size >= BATCH_DOWNLOAD_WARNING) {
+            if (!confirm(`您选择了 ${selectedFiles.size} 个文件，浏览器可能会阻止多个下载。建议逐个下载。是否继续？`)) return;
+        }
         const container = getCurrentFS();
+        let index = 0;
         for (const key of selectedFiles) {
             try {
                 const { folderId, subId, fileName } = JSON.parse(key);
@@ -622,7 +636,11 @@
                 const subObj = folderObj.children.find(c => c.id === subId);
                 if (!subObj) continue;
                 const fileObj = subObj.files.find(f => f.name === fileName);
-                if (fileObj) await downloadFile(folderObj.name, subObj.name, fileObj);
+                if (fileObj) {
+                    await downloadFile(folderObj.name, subObj.name, fileObj);
+                    index++;
+                    if (index < selectedFiles.size) await new Promise(r => setTimeout(r, 600));
+                }
             } catch (e) {}
         }
         toggleSelectMode(false);
@@ -734,7 +752,7 @@
     window._exportStructure = function() { const c = getCurrentFS(); const blob = new Blob([JSON.stringify({ scope: currentScope, folders: c.folders, trash: c.trash }, null, 2)], { type:'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
     window._switchScope = function(scope) { if (scope === currentScope) return; currentScope = scope; document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active')); document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active'); currentSelection = null; if (selectMode) toggleSelectMode(false); loadFS().then(() => { document.getElementById('fileView').innerHTML = '<h2 style="color:var(--text-secondary);">请选择文件夹</h2>'; document.getElementById('trashPanel').classList.add('hidden'); }); };
     window._addFolder = async function() { if (currentRole==='readonly') return showToast('只读账户无法创建'); const name = prompt('新文件夹名称：'); if (!name||!validName(name)) return showToast('名称无效'); const c = getCurrentFS(); c.folders.push({ id: crypto.randomUUID?crypto.randomUUID():'tmp_'+Date.now(), name, passwordHash:'', passwordSalt:'', children:[] }); renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); } };
-    window._emptyTrash = async function() { if (currentRole==='readonly') return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; const c = getCurrentFS(); const len = c.trash?c.trash.length:0; for (let i=len-1; i>=0; i--) await apiCall('/permanent-delete','POST',{scope:currentScope, index:i}); await loadFS(); };
+    window._emptyTrash = async function() { if (currentRole==='readonly') return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; await apiCall('/empty-trash', 'POST', { scope: currentScope }); await loadFS(); showToast('回收站已清空'); };
     window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
     window._openSettings = function() { document.getElementById('settingsModal').classList.add('open'); updateSettingsThemeIcon(); };
     window._openProfile = function() { document.getElementById('profileModal').classList.add('open'); };
