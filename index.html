@@ -6,6 +6,7 @@
     <title>龙铭仓库 · 公共与私人空间</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
     <style>
         :root {
             --bg: #f0f2f5; --card-bg: #ffffff; --text: #1e293b; --text-secondary: #64748b;
@@ -348,21 +349,12 @@
 
     function highlightText(text, keyword) {
         if (!keyword) return text;
-        const reg = new RegExp(
-            keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-            'gi'
-        );
-        return text.replace(
-            reg,
-            match => `<mark>${match}</mark>`
-        );
+        const reg = new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        return text.replace(reg, match => `<mark>${match}</mark>`);
     }
 
     function logout() {
-        authToken = null;
-        partialToken = null;
-        currentUser = null;
-        currentRole = '';
+        authToken = null; partialToken = null; currentUser = null; currentRole = '';
         localStorage.removeItem('authToken');
         document.getElementById('mainPanel').classList.remove('active');
         document.getElementById('loginPanel').style.display = 'flex';
@@ -567,7 +559,7 @@
             else if (/\.(mp3|wav|flac|aac)$/i.test(fileName)) iconClass='fa-file-audio';
             else if (/\.pdf$/i.test(fileName) || isPDF) iconClass='fa-file-pdf';
             const card = document.createElement('div'); card.className='file-card';
-            const fileKey = `${folderName}/${subName}/${fileName}`;
+            const fileKey = JSON.stringify({ folderId, subId, fileName });
             if (selectMode) { card.classList.add('selectable'); if (selectedFiles.has(fileKey)) card.classList.add('selected'); }
             const checkMark = document.createElement('div'); checkMark.className='check-mark'; checkMark.innerHTML='<i class="fas fa-check"></i>'; card.appendChild(checkMark);
             if (currentRole !== 'readonly') {
@@ -620,14 +612,15 @@
         if (selectedFiles.size === 0) { showToast('未选择任何文件'); return; }
         const container = getCurrentFS();
         for (const key of selectedFiles) {
-            const parts = key.split('/'); if (parts.length < 3) continue;
-            const folder = parts[0], sub = parts.slice(1, -1).join('/'), file = parts[parts.length-1];
-            const folderObj = container.folders.find(f => f.name === folder);
-            if (!folderObj) continue;
-            const subObj = folderObj.children.find(c => c.name === sub);
-            if (!subObj) continue;
-            const fileObj = subObj.files.find(f => f.name === file);
-            if (fileObj) await downloadFile(folder, sub, fileObj);
+            try {
+                const { folderId, subId, fileName } = JSON.parse(key);
+                const folderObj = container.folders.find(f => f.id === folderId);
+                if (!folderObj) continue;
+                const subObj = folderObj.children.find(c => c.id === subId);
+                if (!subObj) continue;
+                const fileObj = subObj.files.find(f => f.name === fileName);
+                if (fileObj) await downloadFile(folderObj.name, subObj.name, fileObj);
+            } catch (e) { /* ignore parse errors */ }
         }
         toggleSelectMode(false);
         if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
@@ -717,20 +710,17 @@
                     totalProcessed++;
                     updateProgress(Math.round((totalProcessed / totalFileChunks) * 100), `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
                 }
-                if (!child.files.some(f => f.name === safeName)) {
-                    child.files.push({ name: safeName, type:'file', size:file.size, mime:file.type || 'application/octet-stream' });
-                } else {
-                    showToast('同名文件已存在');
-                }
             }
-            await saveFS(); showToast('上传成功'); await loadFS(); renderFileView(folderId, subId);
+            await loadFS();
+            renderFileView(folderId, subId);
+            showToast('上传成功');
         } catch(e) { showToast('上传失败: '+e.message); }
         finally { updateProgress(0); showLoading(false); }
     }
 
     window._handleFileSelect = async function(input) {
         if (!input.files || !input.files.length) return;
-        try { await uploadFiles(Array.from(input.files)); showToast(`上传成功，共 ${input.files.length} 个文件`); }
+        try { await uploadFiles(Array.from(input.files)); }
         catch(e) { showToast('上传失败：' + e.message); }
         input.value = '';
     };
@@ -807,7 +797,8 @@
     window._useGravatar = function() {
         if (currentUser?.email) {
             const email = currentUser.email.trim().toLowerCase();
-            document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${email}?d=identicon`;
+            const hash = md5(email);
+            document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${hash}?d=identicon`;
         } else { showToast('未绑定邮箱'); }
     };
 
@@ -859,13 +850,62 @@
 
     async function tryAutoLogin() {
         if (authToken) {
-            try { const data = await apiCall('/get-fs'); if (data) {currentUser = {
-    username: data.username || '',
-    email: data.email || '',
-    inviteCode: data.inviteCode || '',
-    avatar: data.avatar || ''
-}; currentRole = data.role || 'admin'; document.getElementById('loginPanel').style.display = 'none'; document.getElementById('mainPanel').classList.add('active'); await loadFS(); applyBackground(); } } catch(e) { authToken = null; localStorage.removeItem('authToken'); }
+            try {
+                const data = await apiCall('/get-fs');
+                if (data) {
+                    currentUser = { username: data.username || '', email: data.email || '', inviteCode: data.inviteCode || '', avatar: data.avatar || '' };
+                    currentRole = data.role || 'admin';
+                    fsData = { public: data.public || { folders: [], trash: [] }, private: data.private || { folders: [], trash: [] } };
+                    document.getElementById('loginPanel').style.display = 'none';
+                    document.getElementById('mainPanel').classList.add('active');
+                    renderTree();
+                    applyBackground();
+                    updateUIByRole();
+                }
+            } catch(e) { authToken = null; localStorage.removeItem('authToken'); }
         }
+    }
+
+    function searchFiles(query) {
+        const panel = document.getElementById('searchResults');
+        panel.innerHTML = '';
+        if (!query) { panel.classList.add('hidden'); return; }
+        const container = getCurrentFS();
+        const results = [];
+        container.folders.forEach(folder => {
+            if (folder.passwordHash && !unlockedFolders[folder.id]) return;
+            folder.children?.forEach(sub => {
+                sub.files?.forEach(file => {
+                    if (file.name.toLowerCase().includes(query)) {
+                        results.push({ folderId: folder.id, subId: sub.id, folderName: folder.name, subName: sub.name, fileName: file.name });
+                    }
+                });
+            });
+        });
+        if (results.length === 0) {
+            panel.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);">无匹配文件</div>';
+            panel.classList.remove('hidden');
+            return;
+        }
+        results.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'search-result-item';
+            div.innerHTML = `<span>📄 ${highlightText(r.fileName, query)}</span> <span class="path">${r.folderName}/${r.subName}</span>`;
+            div.onclick = () => {
+                selectSub(r.folderId, r.subId, document.querySelector(`.sub-item`)); // 简单跳转
+                // 定位到对应的子分类
+                const subItems = document.querySelectorAll('.sub-item');
+                for (const item of subItems) {
+                    if (item.onclick && item.innerText.includes(r.subName)) {
+                        item.click();
+                        break;
+                    }
+                }
+                panel.classList.add('hidden');
+            };
+            panel.appendChild(div);
+        });
+        panel.classList.remove('hidden');
     }
 
     document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
@@ -936,7 +976,11 @@
     let searchTimer;
     document.getElementById('searchInput').addEventListener('input', () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => { renderTree(); }, 300);
+        searchTimer = setTimeout(() => {
+            renderTree();
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            searchFiles(query);
+        }, 300);
     });
 
     tryAutoLogin();
