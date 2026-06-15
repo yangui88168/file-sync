@@ -308,7 +308,7 @@ connect-src 'self'
     const CHUNK_SIZE = 5 * 1024 * 1024;
     const MAX_FILE_SIZE = 100 * 1024 * 1024;
     const MAX_EDIT_SIZE = 500 * 1024;
-    const FETCH_TIMEOUT = 30000; // 30秒超时
+    const FETCH_TIMEOUT = 30000;
 
     // ================== Token 管理 ==================
     const TokenManager = {
@@ -335,7 +335,6 @@ connect-src 'self'
     function validName(name, max = 64) { return name && String(name).trim().length > 0 && String(name).length <= max; }
     function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
-    // 带超时的 fetch
     async function fetchWithTimeout(resource, options = {}, timeout = FETCH_TIMEOUT) {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeout);
@@ -350,7 +349,6 @@ connect-src 'self'
         }
     }
 
-    // ================== API 通信（已移除自动 401 退出） ==================
     async function apiCall(path, method='GET', body=null) {
         const token = TokenManager.getToken() || TokenManager.getPartialToken();
         const headers = { 'Content-Type':'application/json' };
@@ -371,7 +369,6 @@ connect-src 'self'
         console.log(`[API] Response ${res.status}`, data);
 
         if (!res.ok) {
-            // 不再自动退出，仅抛出错误给调用方处理
             const errorMsg = data.error || `请求失败 (${res.status})`;
             throw new Error(errorMsg);
         }
@@ -424,7 +421,6 @@ connect-src 'self'
         showLoading(true);
         try {
             const data = await apiCall('/get-fs');
-            // 后端返回结构为 { success, data: { public, private, version } }
             const fsRes = data.data || data;
             fsData = {
                 public: fsRes.public || { folders: [], trash: [] },
@@ -463,24 +459,53 @@ connect-src 'self'
         return fo?.children?.find(c => c.id === subId);
     }
 
-    // ================== 回收站/删除辅助 ==================
+    // ================== 核心：移动至回收站（修复版） ==================
     async function moveToTrash(type, folderId, subId, fileName) {
-        await apiCall('/move-to-trash', 'POST', { scope: currentScope, type, folderId, subId, fileName });
-        const container = getCurrentFS();
-        if (type === 'folder') {
-            container.folders = container.folders.filter(f => f.id !== folderId);
-        } else if (type === 'sub') {
-            const folder = findFolderObj(folderId);
-            if (folder) folder.children = folder.children.filter(c => c.id !== subId);
-        } else if (type === 'file') {
-            const sub = findSubObj(folderId, subId);
-            if (sub) sub.files = sub.files.filter(f => f.name !== fileName);
+        if (!isAdmin()) return showToast('只读账户无法删除');
+        try {
+            await apiCall('/move-to-trash', 'POST', {
+                scope: currentScope,
+                type,
+                folderId,
+                subId,
+                fileName
+            });
+            // 成功后重新从服务器加载数据，确保完全同步
+            await loadFS();
+            // 如果当前选中的子分类仍然存在，刷新文件视图；否则清空视图
+            if (currentSelection && currentSelection.folderId && currentSelection.subId) {
+                const subExists = findSubObj(currentSelection.folderId, currentSelection.subId);
+                if (subExists) {
+                    renderFileView(currentSelection.folderId, currentSelection.subId);
+                } else {
+                    document.getElementById('fileView').innerHTML = '';
+                }
+            }
+            showToast('已移入回收站');
+        } catch (err) {
+            showToast('删除失败: ' + (err.message || '未知错误'));
+            // 如果是冲突，重新加载一次保证数据一致
+            if (err.message.includes('冲突')) {
+                await loadFS();
+                renderTree();
+            }
         }
-        renderTree();
-        if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
     }
 
-    // ================== 目录树渲染 ==================
+    // ================== 文件夹/子分类删除（调用 moveToTrash） ==================
+    async function deleteFolder(folderId, name) {
+        if (!isAdmin()) return showToast('只读账户无法删除');
+        if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
+        await moveToTrash('folder', folderId);
+    }
+
+    async function deleteSub(folderId, subId, name) {
+        if (!isAdmin()) return showToast('只读账户无法删除');
+        if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
+        await moveToTrash('sub', folderId, subId);
+    }
+
+    // ================== 目录树渲染（保持不变，只整合删除调用） ==================
     function escapeHtml(text) {
         return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
     }
@@ -572,7 +597,7 @@ connect-src 'self'
         if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
     }
 
-    // ================== 文件夹/子分类操作 ==================
+    // ================== 其他文件夹/子分类操作 ==================
     async function setFolderPassword(folderId) {
         const newPwd = prompt(`设置密码（留空=清除）：`); if (newPwd === null) return;
         await apiCall('/set-folder-password', 'POST', { scope: currentScope, folderId, password: newPwd || '' });
@@ -588,11 +613,6 @@ connect-src 'self'
         renderTree();
         if (currentSelection?.folderId === folderId) renderFileView(folderId, currentSelection.subId);
     }
-    async function deleteFolder(folderId, name) {
-        if (!isAdmin()) return showToast('只读账户无法删除');
-        if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
-        await moveToTrash('folder', folderId);
-    }
     async function renameSub(folderId, subId, oldName) {
         if (!isAdmin()) return showToast('只读账户无法重命名');
         const newName = prompt('新子分类名：', oldName); if (!newName || !validName(newName)) return;
@@ -601,11 +621,6 @@ connect-src 'self'
         if (sub) sub.name = newName;
         renderTree();
         if (currentSelection?.folderId === folderId && currentSelection?.subId === subId) renderFileView(folderId, subId);
-    }
-    async function deleteSub(folderId, subId, name) {
-        if (!isAdmin()) return showToast('只读账户无法删除');
-        if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
-        await moveToTrash('sub', folderId, subId);
     }
     async function addSubFolder(folderId) {
         if (!isAdmin()) return showToast('只读账户无法添加');
@@ -698,7 +713,7 @@ connect-src 'self'
         fv.appendChild(grid);
     }
 
-    // ================== 下载/预览 ==================
+    // ================== 下载/预览/编辑 ==================
     async function downloadFile(folder, sub, fileObj) {
         try {
             const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
@@ -746,7 +761,6 @@ connect-src 'self'
         } catch(e) { showToast('预览失败: ' + e.message); }
     }
 
-    // ================== 编辑 ==================
     let editorCurrentSub = null, editorFileName = '';
     async function openEditor(folder, sub, idx, fileName) {
         const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, {
@@ -884,7 +898,6 @@ connect-src 'self'
             return;
         }
         try {
-            console.log('[Init] 尝试自动登录');
             const user = await apiCall('/me');
             currentUser = user.data || user;
             updateUserUI();
@@ -892,7 +905,6 @@ connect-src 'self'
             document.getElementById('mainPanel').classList.add('active');
             await loadFS();
             applyBackground();
-            console.log('[Init] 自动登录成功');
         } catch (e) {
             console.error('[Init] 自动登录失败:', e);
             TokenManager.clear();
@@ -1037,7 +1049,7 @@ connect-src 'self'
         } else { showToast('未绑定邮箱'); }
     };
 
-    // ================== 登录流程（防重复 + 调试日志） ==================
+    // ================== 登录流程 ==================
     let loginLock = false;
     document.getElementById('loginNextBtn').onclick = async function() {
         if (loginLock) return;
@@ -1047,17 +1059,14 @@ connect-src 'self'
 
         loginLock = true;
         this.disabled = true;
-        console.log('[Login Step1] 开始登录第一步', acc);
         try {
             const res = await apiCall('/login', 'POST', { username: acc, password: pwd });
-            console.log('[Login Step1] 成功，获得 partial token');
             const partialToken = res.data?.partialToken || res.partialToken;
             TokenManager.setPartialToken(partialToken);
             document.getElementById('loginAccountDisplay').textContent = res.data?.username || res.username;
             document.getElementById('loginStep1').classList.add('hidden');
             document.getElementById('loginStep2').classList.remove('hidden');
         } catch (e) {
-            console.error('[Login Step1] 失败:', e);
             showToast(e.message || '登录失败');
         } finally {
             loginLock = false;
@@ -1072,13 +1081,11 @@ connect-src 'self'
 
         loginLock = true;
         this.disabled = true;
-        console.log('[Login Step2] 验证二级密码');
         try {
             const data = await apiCall('/verify-second-password', 'POST', { secondPassword: sp });
-            console.log('[Login Step2] 成功，获得完整 token');
             const fullToken = data.data?.token || data.token;
             TokenManager.setToken(fullToken);
-            TokenManager.removePartialToken(); // 仅移除 partialToken
+            TokenManager.removePartialToken();
             const userInfo = data.data || data;
             currentUser = {
                 username: userInfo.username,
@@ -1093,7 +1100,6 @@ connect-src 'self'
             loadFS();
             applyBackground();
         } catch (e) {
-            console.error('[Login Step2] 失败:', e);
             showToast(e.message || '登录失败');
         } finally {
             loginLock = false;
@@ -1101,7 +1107,6 @@ connect-src 'self'
         }
     };
 
-    // 注册/返回登录等事件
     document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
     document.getElementById('goLogin').onclick = () => { document.getElementById('registerPanel').style.display='none'; document.getElementById('loginPanel').style.display='flex'; };
     document.getElementById('loginBackBtn').onclick = () => { document.getElementById('loginStep2').classList.add('hidden'); document.getElementById('loginStep1').classList.remove('hidden'); TokenManager.removePartialToken(); };
@@ -1113,70 +1118,17 @@ connect-src 'self'
         try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.data?.inviteCode || res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
     };
 
-    const previewClose = document.getElementById('previewClose');
-if (previewClose) {
-    previewClose.addEventListener('click', () => {
-        document.getElementById('previewModal')
-            ?.classList.remove('open');
-    });
-}
+    // 关闭模态框事件
+    document.getElementById('previewClose').addEventListener('click', () => { document.getElementById('previewModal').classList.remove('open'); });
+    document.getElementById('closeProfileModal').addEventListener('click', () => { document.getElementById('profileModal').classList.remove('open'); });
+    document.getElementById('closeSettingsModal').addEventListener('click', () => { document.getElementById('settingsModal').classList.remove('open'); });
+    document.getElementById('cancelPasswordBtn').addEventListener('click', () => { document.getElementById('passwordSubModal').classList.remove('open'); });
+    document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => { document.getElementById('secondPwdSubModal').classList.remove('open'); });
+    document.getElementById('cancelUsernameBtn').addEventListener('click', () => { document.getElementById('usernameSubModal').classList.remove('open'); });
+    document.getElementById('cancelAvatarBtn').addEventListener('click', () => { document.getElementById('avatarSubModal').classList.remove('open'); });
+    document.getElementById('cancelBgBtn').addEventListener('click', () => { document.getElementById('bgSubModal').classList.remove('open'); });
 
-const closeProfileModal = document.getElementById('closeProfileModal');
-if (closeProfileModal) {
-    closeProfileModal.addEventListener('click', () => {
-        document.getElementById('profileModal')
-            ?.classList.remove('open');
-    });
-}
-
-const closeSettingsModal = document.getElementById('closeSettingsModal');
-if (closeSettingsModal) {
-    closeSettingsModal.addEventListener('click', () => {
-        document.getElementById('settingsModal')
-            ?.classList.remove('open');
-    });
-}
-
-const cancelPasswordBtn = document.getElementById('cancelPasswordBtn');
-if (cancelPasswordBtn) {
-    cancelPasswordBtn.addEventListener('click', () => {
-        document.getElementById('passwordSubModal')
-            ?.classList.remove('open');
-    });
-}
-
-const cancelSecondPwdBtn = document.getElementById('cancelSecondPwdBtn');
-if (cancelSecondPwdBtn) {
-    cancelSecondPwdBtn.addEventListener('click', () => {
-        document.getElementById('secondPwdSubModal')
-            ?.classList.remove('open');
-    });
-}
-
-const cancelUsernameBtn = document.getElementById('cancelUsernameBtn');
-if (cancelUsernameBtn) {
-    cancelUsernameBtn.addEventListener('click', () => {
-        document.getElementById('usernameSubModal')
-            ?.classList.remove('open');
-    });
-}
-
-const cancelAvatarBtn = document.getElementById('cancelAvatarBtn');
-if (cancelAvatarBtn) {
-    cancelAvatarBtn.addEventListener('click', () => {
-        document.getElementById('avatarSubModal')
-            ?.classList.remove('open');
-    });
-}
-
-const cancelBgBtn = document.getElementById('cancelBgBtn');
-if (cancelBgBtn) {
-    cancelBgBtn.addEventListener('click', () => {
-        document.getElementById('bgSubModal')
-            ?.classList.remove('open');
-    });
-}
-    // 启动应用
+    // 启动
     initApp();
 })();
 </script>
