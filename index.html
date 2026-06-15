@@ -90,7 +90,7 @@
         @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
         .avatar-img { width:38px; height:38px; border-radius:50%; object-fit:cover; cursor:pointer; }
         .avatar-img-large { width:60px; height:60px; border-radius:50%; object-fit:cover; }
-        .settings-icon { background:none; border:none; cursor:pointer; width:48px; height:48px; display:flex; align-items:center; justify-content:center; border-radius:12px; color:var(--text); font-size:1.5rem; }
+        .settings-icon { background:none; border:none; cursor:pointer; font-size:1.5rem; color:var(--text); z-index:20; padding:0.5rem 0.7rem; border-radius:8px; }
         .settings-icon:hover { background:var(--hover); }
         .toast { position:fixed; top:20px; right:20px; background:var(--danger); color:white; padding:0.8rem 1.2rem; border-radius:8px; z-index:3000; opacity:0; transition:opacity 0.3s; }
         .toast.show { opacity:1; }
@@ -267,13 +267,7 @@
         </div>
         <label>或输入背景图片 URL：</label>
         <input type="text" id="bgImageUrl" placeholder="https://example.com/bg.jpg"><br><br>
-        <button class="auth-btn" onclick="window._saveBgUrl()">保存 URL</button>
-        <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem;">
-            <label>上传背景图片（支持 jpg/png）</label>
-            <input type="file" id="backgroundUpload" accept="image/*" /><br><br>
-            <button class="auth-btn" onclick="window._uploadBackground()">上传背景</button>
-            <button class="auth-btn secondary" onclick="window._resetBackground()" style="margin-top:0.5rem;">重置背景</button>
-        </div>
+        <button class="auth-btn" onclick="window._saveBgUrl()">保存背景</button>
         <button class="auth-btn secondary" id="cancelBgBtn" style="margin-top:0.5rem;">取消</button>
     </div>
 </div>
@@ -337,45 +331,14 @@
     }
 
     function showLoading(show=true) { document.getElementById('loadingOverlay').classList.toggle('active', show); }
-   function escapeHtml(text) {
-    return String(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-function highlightText(text, keyword) {
-
-    if (!keyword) return text;
-
-    const reg = new RegExp(
-        keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-        'gi'
-    );
-
-    return text.replace(
-        reg,
-        match => `<mark>${match}</mark>`
-    );
-}function logout() {
-    authToken = null;
-    partialToken = null;
-    currentUser = null;
-    currentRole = '';
-
-    localStorage.removeItem('authToken');
-
-    document.getElementById('mainPanel').classList.remove('active');
-    document.getElementById('loginPanel').style.display = 'flex';
-
-    document.getElementById('loginStep1').classList.remove('hidden');
-    document.getElementById('loginStep2').classList.add('hidden');
-
-    showToast('已退出登录');
-}
-
+    function logout() {
+        authToken = null; partialToken = null; currentUser = null; currentRole = '';
+        localStorage.removeItem('authToken');
+        document.getElementById('mainPanel').classList.remove('active');
+        document.getElementById('loginPanel').style.display = 'flex';
+        document.getElementById('loginStep1').classList.remove('hidden');
+        document.getElementById('loginStep2').classList.add('hidden');
+    }
     function updateUIByRole() {
         const isReadOnly = currentRole === 'readonly';
         document.getElementById('uploadBtn').disabled = isReadOnly;
@@ -396,17 +359,7 @@ function highlightText(text, keyword) {
     function getCurrentFS() { return currentScope === 'public' ? fsData.public : fsData.private; }
     async function saveFS() {
         const container = getCurrentFS();
-        const ver = container.version || 1;
-        try {
-            const res = await apiCall('/update-fs', 'PUT', { scope: currentScope, folders: container.folders, trash: container.trash, version: ver });
-            container.version = res.version;
-        } catch (e) {
-            if (e.message.includes('冲突') || e.message.includes('修改')) {
-                showToast('文件已被其他用户修改，正在自动刷新...');
-                await loadFS();
-                if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
-            } else showToast(e.message);
-        }
+        await apiCall('/update-fs', 'PUT', { scope: currentScope, folders: container.folders, trash: container.trash });
     }
 
     function findFolderObj(id) { return getCurrentFS().folders.find(f => f.id === id); }
@@ -421,7 +374,14 @@ function highlightText(text, keyword) {
         if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
     }
 
-    function renderTree() {        const tree = document.getElementById('treeRoot'); tree.innerHTML = '';
+    function highlightText(text, query) {
+        if (!query) return text;
+        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        return String(text).replace(regex, '<mark>$1</mark>');
+    }
+
+    function renderTree() {
+        const tree = document.getElementById('treeRoot'); tree.innerHTML = '';
         const container = getCurrentFS(); if (!container.folders) return;
         const query = document.getElementById('searchInput')?.value?.toLowerCase() || '';
         container.folders.forEach(folder => {
@@ -431,11 +391,7 @@ function highlightText(text, keyword) {
             const chevron = document.createElement('i'); chevron.className = 'fas fa-chevron-right'; chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
             const nameSpan = document.createElement('span'); nameSpan.style.flex = '1';
             const icon = document.createElement('i'); icon.className = locked ? 'fas fa-lock' : 'fas fa-folder'; icon.style.cssText = `margin-right:6px;color:${locked ? '#f59e0b' : (currentScope === 'public' ? '#2563eb' : '#8b5cf6')};`;
-            nameSpan.appendChild(icon);
-nameSpan.innerHTML += highlightText(
-    escapeHtml(folder.name),
-    query
-);
+            nameSpan.appendChild(icon); nameSpan.innerHTML += highlightText(folder.name, query);
             const actions = document.createElement('div'); actions.className = 'folder-actions';
             if (currentRole !== 'readonly') {
                 [['fa-key','密码'],['fa-edit','重命名'],['fa-trash-alt','删除']].forEach(([ic,title],idx)=>{
@@ -450,12 +406,7 @@ nameSpan.innerHTML += highlightText(
                 folder.children.forEach(child => {
                     const cli = document.createElement('li'); cli.className = 'sub-item';
                     const sn = document.createElement('span'); sn.style.flex='1';
-                    sn.innerHTML =
-'<i class="fas fa-folder-open" style="margin-right:6px;color:#64748b;font-size:0.85rem;"></i>' +
-highlightText(
-    escapeHtml(child.name),
-    query
-);
+                    sn.innerHTML = '<i class="fas fa-folder-open" style="margin-right:6px;color:#64748b;font-size:0.85rem;"></i>' + highlightText(child.name, query);
                     const sa = document.createElement('div'); sa.className='sub-item-actions';
                     if (currentRole !== 'readonly') {
                         const rb = document.createElement('button'); rb.innerHTML='<i class="fas fa-edit"></i>';
@@ -648,10 +599,6 @@ highlightText(
         try {
             const mime = fileObj.mime || '';
             if (mime.startsWith('image/')) {
-
-    
-
-}
                 const headers = { 'Content-Type':'application/json' }; if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
                 const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, { headers });
                 if (!res.ok) { const err = await res.json(); throw new Error(err.error || '预览失败'); }
@@ -672,17 +619,7 @@ highlightText(
             const base64 = await res.text();
             const binary = atob(base64);
             const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-            let text;
-
-try {
-
-    text = new TextDecoder('utf-8').decode(bytes);
-
-} catch {
-
-    text = new TextDecoder().decode(bytes);
-
-}
+            const text = new TextDecoder('utf-8').decode(bytes);
             document.getElementById('editorFileName').textContent = fileName;
             document.getElementById('editorTextarea').value = text;
             document.getElementById('editorModal').classList.add('open');
@@ -718,51 +655,20 @@ try {
         const folderName = folderObj ? folderObj.name : folderId;
         const subName = child.name;
         showLoading(true);
-        const uploadId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36);
         let totalProcessed = 0;
         const totalFileChunks = files.reduce((sum, file) => sum + Math.ceil(file.size / CHUNK_SIZE), 0);
         try {
-           for (const file of files) {
-
-    const safeName = file.name.replace(/[\\/]/g, '_');
-
-    if (file.size > MAX_FILE_SIZE) {
-        showToast(`${file.name} 超过100MB限制，已跳过`);
-        continue;
-    }
-
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            for (const file of files) {
+                if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} 超过100MB限制，已跳过`); continue; }
+                const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
                 for (let j=0; j<totalChunks; j++) {
                     const chunk = file.slice(j * CHUNK_SIZE, Math.min((j+1)*CHUNK_SIZE, file.size));
                     const chunkData = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(chunk); });
-                   await apiCall('/upload-chunk', 'POST', {
-    scope: currentScope,
-    fileName: safeName,
-    folder: folderName,
-    subFolder: subName,
-    chunkIndex: j,
-    totalChunks,
-    data: chunkData.split(',')[1],
-    mime: file.type,
-    uploadId
-});
+                    await apiCall('/upload-chunk', 'POST', { scope: currentScope, fileName: file.name, folder: folderName, subFolder: subName, chunkIndex: j, totalChunks, data: chunkData.split(',')[1], mime: file.type });
                     totalProcessed++;
                     updateProgress(Math.round((totalProcessed / totalFileChunks) * 100), `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
                 }
-                if (!child.files.some(f => f.name === safeName)) {
-
-   child.files.push({
-       name: safeName,
-       type:'file',
-       size:file.size,
-       mime:file.type || 'application/octet-stream'
-   });
-
-} else {
-
-   showToast('同名文件已存在');
-
-}
+                child.files.push({ name: file.name, type:'file', size: file.size, mime: file.type || 'application/octet-stream' });
             }
             await saveFS(); showToast('上传成功'); await loadFS(); renderFileView(folderId, subId);
         } catch(e) { showToast('上传失败: '+e.message); }
@@ -771,9 +677,7 @@ try {
 
     window._handleFileSelect = async function(input) {
         if (!input.files || !input.files.length) return;
-        try { await uploadFiles(
-    Array.from(input.files)
-);; showToast(`上传成功，共 ${input.files.length} 个文件`); }
+        try { await uploadFiles([...input.files]); showToast(`上传成功，共 ${input.files.length} 个文件`); }
         catch(e) { showToast('上传失败：' + e.message); }
         input.value = '';
     };
@@ -796,60 +700,12 @@ try {
     window._logout = function() { logout(); };
     window._toggleTheme = function() { document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); updateSettingsThemeIcon(); };
     window._setBg = function(bg) { userBg = bg; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
-    window._saveBgUrl = function() { const url = document.getElementById('bgImageUrl').value.trim();
-
-try {
-    new URL(url);
-} catch {
-    showToast('链接格式错误');
-    return;
-}if (url && !url.match(/^https?:\/\//)) { showToast('请输入有效的 HTTP/HTTPS URL'); return; } if (url) { userBgImage = url; userBg = ''; localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', ''); } applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
-    window._uploadBackground = async function() {
-        const file = document.getElementById('backgroundUpload').files[0];
-        if (!file) return showToast('请选择背景图片');
-        if (file.size > 2 * 1024 * 1024) return showToast('背景图片不能超过2MB');
-        showLoading(true);
-        try {
-            const reader = new FileReader();
-            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-            const base64 = dataUrl.split(',')[1];
-            const res = await apiCall('/upload-background', 'POST', { data: base64, mime: file.type });
-            userBgImage = res.url; userBg = '';
-            localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', '');
-            applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open');
-        } catch(e) { showToast('上传失败: '+e.message); } finally { showLoading(false); }
-    };
-    window._resetBackground = function() { userBg = 'default'; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已重置'); };
+    window._saveBgUrl = function() { const url = document.getElementById('bgImageUrl').value.trim(); if (url && !url.match(/^https?:\/\//)) { showToast('请输入有效的 HTTP/HTTPS URL'); return; } if (url) { userBgImage = url; userBg = ''; localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', ''); } applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
     window._updatePassword = async function() { const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value; if (!oldPwd||!newPwd) return showToast('请填写完整'); if (newPwd.length<6) return showToast('新密码至少6位'); if (newPwd!==conf) return showToast('两次输入不一致'); try { await apiCall('/update-profile','POST',{oldPassword:oldPwd,newPassword:newPwd}); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
     window._updateSecondPwd = async function() { const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value; if (!oldS||!newS) return showToast('请填写完整'); if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字'); if (newS!==conf) return showToast('两次输入不一致'); try { await apiCall('/update-profile','POST',{oldSecondPassword:oldS,newSecondPassword:newS}); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
     window._updateUsername = async function() { const newName = document.getElementById('newUsername').value.trim(); if (!newName) return showToast('请输入新用户名'); try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); authToken = res.token; localStorage.setItem('authToken', authToken); currentUser.username = res.newUsername; document.getElementById('profileUsername').textContent = res.newUsername; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
     window._uploadAvatar = async function() { const file = document.getElementById('avatarFileInput').files[0]; if (!file) return showToast('请选择图片'); if (file.size > 2*1024*1024) return showToast('头像不能超过2MB'); showLoading(true); try { const reader = new FileReader(); const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); }); const res = await apiCall('/upload-avatar','POST',{data:dataUrl.split(',')[1],mime:file.type}); document.getElementById('avatarImg').src = res.avatarUrl; document.getElementById('profileAvatarImg').src = res.avatarUrl; showToast('头像已更新'); } catch(e) { showToast(e.message); } finally { showLoading(false); } };
-    window._saveAvatarUrl = async function() {
-
-    const url = document.getElementById('avatarUrlInput').value.trim();
-
-if (!/^https?:\/\//i.test(url)) {
-    showToast('仅允许http或https图片地址');
-    return;
-}
-
-currentUser.avatar = url;
-        document.getElementById('avatarImg').src = url;
-        document.getElementById('profileAvatarImg').src = url;
-
-        localStorage.setItem(
-            'user_avatar',
-            url
-        );
-
-        showToast('头像已更新');
-
-    } catch(err) {
-
-        showToast(err.message);
-
-    }
-};
+    window._saveAvatarUrl = function() { const url = document.getElementById('avatarUrl').value.trim(); if (url) { document.getElementById('avatarImg').src = url; document.getElementById('profileAvatarImg').src = url; showToast('头像已更新'); } };
     window._useGravatar = function() { if (currentUser?.email) document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${currentUser.email}?d=identicon`; else showToast('未绑定邮箱'); };
 
     function applyBackground() {
@@ -887,12 +743,7 @@ currentUser.avatar = url;
 
     async function tryAutoLogin() {
         if (authToken) {
-            try { const data = await apiCall('/get-fs'); if (data) {currentUser = {
-    username: data.username || '',
-    email: data.email || '',
-    inviteCode: data.inviteCode || '',
-    avatar: data.avatar || ''
-}; currentRole = data.role || 'admin'; document.getElementById('loginPanel').style.display = 'none'; document.getElementById('mainPanel').classList.add('active'); await loadFS(); applyBackground(); } } catch(e) { authToken = null; localStorage.removeItem('authToken'); }
+            try { const data = await apiCall('/get-fs'); if (data) { currentUser = { username: data.username || '', email: '', inviteCode: '', avatar: '' }; currentRole = data.role || 'admin'; document.getElementById('loginPanel').style.display = 'none'; document.getElementById('mainPanel').classList.add('active'); await loadFS(); applyBackground(); } } catch(e) { authToken = null; localStorage.removeItem('authToken'); }
         }
     }
 
@@ -922,12 +773,7 @@ currentUser.avatar = url;
     };
     function handleLoginSuccess(data) {
         authToken = data.token; localStorage.setItem('authToken', authToken);
-      currentUser = {
-    username:data.username || '',
-    email:data.email || '',
-    inviteCode:data.inviteCode || '',
-    avatar:data.avatar || ''
-};
+        currentUser = { username: data.username, email: data.email, inviteCode: data.inviteCode, avatar: data.avatar || '' };
         currentRole = data.role || 'admin';
         document.getElementById('loginPanel').style.display = 'none'; document.getElementById('mainPanel').classList.add('active');
         document.getElementById('profileUsername').textContent = data.username; document.getElementById('myInviteCode').value = data.inviteCode || '';
@@ -944,21 +790,7 @@ currentUser.avatar = url;
     document.getElementById('cancelBgBtn').addEventListener('click', ()=> document.getElementById('bgSubModal').classList.remove('open'));
 
     document.getElementById('loginPanel').style.display = 'flex';
-let searchTimer;
-
-document
-.getElementById('searchInput')
-.addEventListener('input', () => {
-
-    clearTimeout(searchTimer);
-
-    searchTimer = setTimeout(() => {
-
-        renderTree();
-
-    }, 300);
-
-});tryAutoLogin();
+    tryAutoLogin();
 })();
 </script>
 </body>
