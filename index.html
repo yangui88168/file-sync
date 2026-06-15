@@ -148,7 +148,7 @@
                 <button class="scope-tab active" data-scope="public" onclick="window._switchScope('public')">🌐 公共资料</button>
                 <button class="scope-tab private" data-scope="private" onclick="window._switchScope('private')">🔒 我的空间</button>
             </div>
-            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名或内容..." autocomplete="off">
+            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名..." autocomplete="off">
             <div id="searchResults" class="search-results hidden"></div>
             <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;" onclick="window._addFolder()">+ 新建文件夹</button>
             <ul class="tree" id="treeRoot"></ul>
@@ -293,7 +293,7 @@
     const MAX_EDIT_SIZE = 500 * 1024;
     const MAX_RETRIES = 3;
 
-    let authToken = localStorage.getItem('authToken') || null;
+    let authToken = sessionStorage.getItem('authToken') || null;
     let partialToken = null, currentUser = null, currentRole = '';
     let currentScope = 'public';
     let currentSelection = null;
@@ -355,7 +355,7 @@
 
     function logout() {
         authToken = null; partialToken = null; currentUser = null; currentRole = '';
-        localStorage.removeItem('authToken');
+        sessionStorage.removeItem('authToken');
         document.getElementById('mainPanel').classList.remove('active');
         document.getElementById('loginPanel').style.display = 'flex';
         document.getElementById('loginStep1').classList.remove('hidden');
@@ -415,6 +415,7 @@
         container.folders.forEach(folder => {
             const li = document.createElement('li');
             const div = document.createElement('div'); div.className = 'folder-item';
+            div.dataset.folderId = folder.id;
             const locked = folder.passwordHash && !unlockedFolders[folder.id];
             const chevron = document.createElement('i'); chevron.className = 'fas fa-chevron-right'; chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
             const nameSpan = document.createElement('span'); nameSpan.style.flex = '1';
@@ -434,6 +435,8 @@
             if (!locked && folder.children) {
                 folder.children.forEach(child => {
                     const cli = document.createElement('li'); cli.className = 'sub-item';
+                    cli.dataset.folderId = folder.id;
+                    cli.dataset.subId = child.id;
                     const sn = document.createElement('span'); sn.style.flex='1';
                     sn.innerHTML = '<i class="fas fa-folder-open" style="margin-right:6px;color:#64748b;font-size:0.85rem;"></i>' + highlightText(escapeHtml(child.name), query);
                     const sa = document.createElement('div'); sa.className='sub-item-actions';
@@ -471,7 +474,7 @@
     function selectSub(folderId, subId, cli) {
         currentSelection = { folderId, subId };
         document.querySelectorAll('.sub-item').forEach(el => el.style.background = '');
-        cli.style.background = '#dbeafe';
+        if (cli) cli.style.background = '#dbeafe';
         if (selectMode) toggleSelectMode(false);
         renderFileView(folderId, subId);
         if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
@@ -620,7 +623,7 @@
                 if (!subObj) continue;
                 const fileObj = subObj.files.find(f => f.name === fileName);
                 if (fileObj) await downloadFile(folderObj.name, subObj.name, fileObj);
-            } catch (e) { /* ignore parse errors */ }
+            } catch (e) {}
         }
         toggleSelectMode(false);
         if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
@@ -753,6 +756,8 @@
         const file = document.getElementById('backgroundUpload').files[0];
         if (!file) return showToast('请选择背景图片');
         if (file.size > 2 * 1024 * 1024) return showToast('背景图片不能超过2MB');
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+        if (!allowedTypes.includes(file.type)) return showToast('仅支持 PNG、JPEG、WebP、GIF 格式的背景图片');
         showLoading(true);
         try {
             const reader = new FileReader();
@@ -767,7 +772,7 @@
     window._resetBackground = function() { userBg = 'default'; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已重置'); };
     window._updatePassword = async function() { const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value; if (!oldPwd||!newPwd) return showToast('请填写完整'); if (newPwd.length<6) return showToast('新密码至少6位'); if (newPwd!==conf) return showToast('两次输入不一致'); try { await apiCall('/update-profile','POST',{oldPassword:oldPwd,newPassword:newPwd}); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
     window._updateSecondPwd = async function() { const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value; if (!oldS||!newS) return showToast('请填写完整'); if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字'); if (newS!==conf) return showToast('两次输入不一致'); try { await apiCall('/update-profile','POST',{oldSecondPassword:oldS,newSecondPassword:newS}); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
-    window._updateUsername = async function() { const newName = document.getElementById('newUsername').value.trim(); if (!newName) return showToast('请输入新用户名'); try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); authToken = res.token; localStorage.setItem('authToken', authToken); currentUser.username = res.newUsername; document.getElementById('profileUsername').textContent = res.newUsername; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
+    window._updateUsername = async function() { const newName = document.getElementById('newUsername').value.trim(); if (!newName) return showToast('请输入新用户名'); try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); authToken = res.token; sessionStorage.setItem('authToken', authToken); currentUser.username = res.newUsername; document.getElementById('profileUsername').textContent = res.newUsername; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); } };
     window._uploadAvatar = async function() {
         const file = document.getElementById('avatarFileInput').files[0];
         if (!file) return showToast('请选择头像图片');
@@ -862,7 +867,7 @@
                     applyBackground();
                     updateUIByRole();
                 }
-            } catch(e) { authToken = null; localStorage.removeItem('authToken'); }
+            } catch(e) { authToken = null; sessionStorage.removeItem('authToken'); }
         }
     }
 
@@ -892,14 +897,13 @@
             div.className = 'search-result-item';
             div.innerHTML = `<span>📄 ${highlightText(r.fileName, query)}</span> <span class="path">${r.folderName}/${r.subName}</span>`;
             div.onclick = () => {
-                selectSub(r.folderId, r.subId, document.querySelector(`.sub-item`)); // 简单跳转
-                // 定位到对应的子分类
-                const subItems = document.querySelectorAll('.sub-item');
-                for (const item of subItems) {
-                    if (item.onclick && item.innerText.includes(r.subName)) {
-                        item.click();
-                        break;
-                    }
+                const subItem = document.querySelector(`.sub-item[data-folder-id="${r.folderId}"][data-sub-id="${r.subId}"]`);
+                if (subItem) {
+                    subItem.click();
+                } else {
+                    currentSelection = { folderId: r.folderId, subId: r.subId };
+                    document.querySelectorAll('.sub-item').forEach(el => el.style.background = '');
+                    renderFileView(r.folderId, r.subId);
                 }
                 panel.classList.add('hidden');
             };
@@ -948,7 +952,7 @@
         };
     }
     function handleLoginSuccess(data) {
-        authToken = data.token; localStorage.setItem('authToken', authToken);
+        authToken = data.token; sessionStorage.setItem('authToken', authToken);
         currentUser = { username:data.username || '', email:data.email || '', inviteCode:data.inviteCode || '', avatar:data.avatar || '' };
         currentRole = data.role || 'admin';
         document.getElementById('loginPanel').style.display = 'none'; document.getElementById('mainPanel').classList.add('active');
