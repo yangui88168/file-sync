@@ -31,6 +31,7 @@
         .auth-btn:hover { background:var(--primary-hover); }
         .auth-btn.secondary { background:var(--border); color:var(--text); }
         .auth-btn.secondary:hover { background:var(--hover); }
+        .auth-btn:disabled { opacity:0.5; cursor:not-allowed; }
         .hidden { display:none !important; }
         .main-container { display:none; width:100%; height:100vh; background:transparent; flex-direction:column; }
         .main-container.active { display:flex; }
@@ -284,20 +285,25 @@
 <input type="file" id="hiddenFileInput" style="display:none;" multiple onchange="window._handleFileSelect(this)">
 <script>
 (function () {
+    // ================== 常量与配置 ==================
     const API_BASE = 'https://lmck.yangui88168.workers.dev';
     const CHUNK_SIZE = 5 * 1024 * 1024;
     const MAX_FILE_SIZE = 100 * 1024 * 1024;
     const MAX_EDIT_SIZE = 500 * 1024;
+    const FETCH_TIMEOUT = 30000; // 30秒超时
 
     // ================== Token 管理 ==================
     const TokenManager = {
-        getToken() { return localStorage.getItem('token'); },
-        getPartialToken() { return localStorage.getItem('partialToken'); },
-        setToken(token) { localStorage.setItem('token', token); },
-        setPartialToken(token) { localStorage.setItem('partialToken', token); },
+        _store: localStorage,
+        getToken() { return this._store.getItem('token'); },
+        setToken(token) { this._store.setItem('token', token); },
+        removeToken() { this._store.removeItem('token'); },
+        getPartialToken() { return this._store.getItem('partialToken'); },
+        setPartialToken(token) { this._store.setItem('partialToken', token); },
+        removePartialToken() { this._store.removeItem('partialToken'); },
         clear() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('partialToken');
+            this.removeToken();
+            this.removePartialToken();
         }
     };
 
@@ -307,34 +313,49 @@
         toast.textContent = msg; toast.classList.add('show');
         clearTimeout(toast._timeout); toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
     }
-    function sanitizeFileName(name) {
-        return name.replace(/[<>:"|?*\\]/g, '').trim();
-    }
+    function sanitizeFileName(name) { return name.replace(/[<>:"|?*\\]/g, '').trim(); }
     function validName(name, max = 64) { return name && String(name).trim().length > 0 && String(name).length <= max; }
     function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
-    // ================== API 通信 ==================
+    // 带超时的 fetch
+    async function fetchWithTimeout(resource, options = {}, timeout = FETCH_TIMEOUT) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        options.signal = controller.signal;
+        try {
+            const response = await fetch(resource, options);
+            clearTimeout(id);
+            return response;
+        } catch (err) {
+            clearTimeout(id);
+            throw err;
+        }
+    }
+
+    // ================== API 通信（已移除自动 401 退出） ==================
     async function apiCall(path, method='GET', body=null) {
         const token = TokenManager.getToken() || TokenManager.getPartialToken();
         const headers = { 'Content-Type':'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
         const options = { method, headers };
         if (body) options.body = JSON.stringify(body);
+
+        console.log(`[API] ${method} ${path}`, body ? JSON.stringify(body) : '');
         let res;
-        try { res = await fetch(API_BASE + path, options); }
-        catch (err) { throw new Error('网络连接失败'); }
-        if (res.status === 401) {
-            logout();
-            throw new Error('登录已过期');
+        try {
+            res = await fetchWithTimeout(API_BASE + path, options);
+        } catch (err) {
+            console.error('[API] Fetch error:', err);
+            throw new Error('网络连接失败或请求超时');
         }
-        if (res.status === 403) {
-            showToast('权限不足');
-            throw new Error('Forbidden');
-        }
+
         const data = await res.json();
+        console.log(`[API] Response ${res.status}`, data);
+
         if (!res.ok) {
-            const msg = data.error || `请求失败(${res.status})`;
-            throw new Error(msg);
+            // 不再自动退出，仅抛出错误给调用方处理
+            const errorMsg = data.error || `请求失败 (${res.status})`;
+            throw new Error(errorMsg);
         }
         return data;
     }
@@ -370,7 +391,6 @@
         updateUIByRole();
     }
 
-    // ================== 登出 ==================
     function logout() {
         currentUser = null;
         TokenManager.clear();
@@ -386,7 +406,12 @@
         showLoading(true);
         try {
             const data = await apiCall('/get-fs');
-            fsData = { public: data.public || { folders: [], trash: [] }, private: data.private || { folders: [], trash: [] } };
+            // 后端返回结构为 { success, data: { public, private, version } }
+            const fsRes = data.data || data;
+            fsData = {
+                public: fsRes.public || { folders: [], trash: [] },
+                private: fsRes.private || { folders: [], trash: [] }
+            };
             renderTree();
             if (!document.getElementById('trashPanel').classList.contains('hidden')) renderTrash();
             updateUIByRole();
@@ -398,8 +423,13 @@
     async function saveFS(container = getCurrentFS()) {
         const ver = container.version || 1;
         try {
-            const res = await apiCall('/update-fs', 'PUT', { scope: currentScope, folders: container.folders, trash: container.trash, version: ver });
-            container.version = res.version;
+            const res = await apiCall('/update-fs', 'PUT', {
+                scope: currentScope,
+                folders: container.folders,
+                trash: container.trash,
+                version: ver
+            });
+            container.version = (res.data && res.data.version) || res.version;
         } catch (e) {
             if (e.message.includes('冲突') || e.message.includes('修改')) {
                 showToast('文件已被其他用户修改，正在自动刷新...');
@@ -415,7 +445,7 @@
         return fo?.children?.find(c => c.id === subId);
     }
 
-    // ================== 回收站操作 ==================
+    // ================== 回收站/删除辅助 ==================
     async function moveToTrash(type, folderId, subId, fileName) {
         await apiCall('/move-to-trash', 'POST', { scope: currentScope, type, folderId, subId, fileName });
         const container = getCurrentFS();
@@ -432,7 +462,7 @@
         if (currentSelection) renderFileView(currentSelection.folderId, currentSelection.subId);
     }
 
-    // ================== 渲染目录树 ==================
+    // ================== 目录树渲染 ==================
     function escapeHtml(text) {
         return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
     }
@@ -653,7 +683,7 @@
     // ================== 下载/预览 ==================
     async function downloadFile(folder, sub, fileObj) {
         try {
-            const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
+            const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
                 headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
             });
             if (!res.ok) throw new Error('下载失败');
@@ -684,7 +714,7 @@
 
     async function previewFile(folder, sub, fileObj) {
         try {
-            const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
+            const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileObj.name)}`, {
                 headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
             });
             if (!res.ok) throw new Error('预览失败');
@@ -701,7 +731,7 @@
     // ================== 编辑 ==================
     let editorCurrentSub = null, editorFileName = '';
     async function openEditor(folder, sub, idx, fileName) {
-        const res = await fetch(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, {
+        const res = await fetchWithTimeout(`${API_BASE}/download-file?scope=${currentScope}&folder=${encodeURIComponent(folder)}&sub=${encodeURIComponent(sub)}&file=${encodeURIComponent(fileName)}`, {
             headers: { 'Authorization': `Bearer ${TokenManager.getToken()}` }
         });
         if (!res.ok) { showToast('无法读取: ' + (await res.json()).error); return; }
@@ -739,26 +769,44 @@
         const uploadId = crypto.randomUUID();
         let totalProcessed = 0;
         const totalChunks = files.reduce((sum, file) => sum + Math.ceil(file.size / CHUNK_SIZE), 0);
-        for (const file of files) {
-            const safeName = sanitizeFileName(file.name);
-            if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} 超过100MB限制，已跳过`); continue; }
-            const chunks = Math.ceil(file.size / CHUNK_SIZE);
-            for (let j=0; j<chunks; j++) {
-                const chunk = file.slice(j * CHUNK_SIZE, Math.min((j+1)*CHUNK_SIZE, file.size));
-                const chunkData = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(chunk); });
-                await apiCall('/upload-chunk', 'POST', { scope: currentScope, fileName: safeName, folder: folderName, subFolder: subName, chunkIndex: j, totalChunks: chunks, data: chunkData.split(',')[1], mime: file.type, uploadId });
-                totalProcessed++;
-                updateProgress(Math.round((totalProcessed / totalChunks) * 100), `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
+        try {
+            for (const file of files) {
+                const safeName = sanitizeFileName(file.name);
+                if (file.size > MAX_FILE_SIZE) { showToast(`${file.name} 超过100MB限制，已跳过`); continue; }
+                const chunks = Math.ceil(file.size / CHUNK_SIZE);
+                for (let j=0; j<chunks; j++) {
+                    const chunk = file.slice(j * CHUNK_SIZE, Math.min((j+1)*CHUNK_SIZE, file.size));
+                    const chunkData = await new Promise((res, rej) => {
+                        const r = new FileReader();
+                        r.onload = () => res(r.result);
+                        r.onerror = () => rej(new Error('文件读取失败'));
+                        r.readAsDataURL(chunk);
+                    });
+                    await apiCall('/upload-chunk', 'POST', {
+                        scope: currentScope, fileName: safeName, folder: folderName,
+                        subFolder: subName, chunkIndex: j, totalChunks: chunks,
+                        data: chunkData.split(',')[1], mime: file.type, uploadId
+                    });
+                    totalProcessed++;
+                    updateProgress(Math.round((totalProcessed / totalChunks) * 100),
+                        `正在上传 ${files.indexOf(file)+1}/${files.length} 个文件`);
+                }
             }
+            updateProgress(0);
+            showLoading(false);
+            showToast('上传成功');
+            await loadFS();
+            renderFileView(folderId, subId);
+        } catch (e) {
+            console.error('[Upload] 失败:', e);
+            showToast('上传失败: ' + (e.message || '未知错误'));
+        } finally {
+            updateProgress(0);
+            showLoading(false);
         }
-        updateProgress(0);
-        showLoading(false);
-        showToast('上传成功');
-        await loadFS();
-        renderFileView(folderId, subId);
     }
 
-    // ================== 背景 ==================
+    // ================== 背景设置 ==================
     function applyBackground() {
         if (userBgImage) {
             document.body.style.setProperty('--body-bg-image', `url(${userBgImage})`);
@@ -810,7 +858,7 @@
     if (localStorage.getItem('theme')==='dark' || (!localStorage.getItem('theme') && prefersDark)) document.body.classList.add('dark');
     updateSettingsThemeIcon();
 
-    // ================== 自动登录 ==================
+    // ================== 初始化 ==================
     async function initApp() {
         const token = TokenManager.getToken();
         if (!token) {
@@ -818,146 +866,23 @@
             return;
         }
         try {
+            console.log('[Init] 尝试自动登录');
             const user = await apiCall('/me');
-            currentUser = user;
+            currentUser = user.data || user;
             updateUserUI();
             document.getElementById('loginPanel').style.display = 'none';
             document.getElementById('mainPanel').classList.add('active');
             await loadFS();
             applyBackground();
-        } catch {
+            console.log('[Init] 自动登录成功');
+        } catch (e) {
+            console.error('[Init] 自动登录失败:', e);
             TokenManager.clear();
             document.getElementById('loginPanel').style.display = 'flex';
         }
     }
 
-    // ================== 全局暴露函数 ==================
-    window._handleFileSelect = async function(input) { if (!input.files?.length) return; await uploadFiles(Array.from(input.files)); input.value = ''; };
-    window._triggerUpload = function() { if (!currentSelection) return showToast('请先选择子分类'); document.getElementById('hiddenFileInput').click(); };
-    window._downloadAction = function() { if (!currentSelection) return showToast('请先选择子分类'); if (!selectMode) { toggleSelectMode(true); renderFileView(currentSelection.folderId, currentSelection.subId); } else downloadSelectedFiles(); };
-    window._refresh = function() { loadFS(); };
-    window._toggleTrash = function() { const p = document.getElementById('trashPanel'); p.classList.toggle('hidden'); if (!p.classList.contains('hidden')) renderTrash(); };
-    window._exportStructure = function() { const c = getCurrentFS(); const blob = new Blob([JSON.stringify({ scope: currentScope, folders: c.folders, trash: c.trash }, null, 2)], { type:'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
-    window._switchScope = function(scope) { if (scope === currentScope) return; currentScope = scope; document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active')); document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active'); currentSelection = null; if (selectMode) toggleSelectMode(false); loadFS().then(() => { document.getElementById('fileView').innerHTML = ''; document.getElementById('trashPanel').classList.add('hidden'); }); };
-    window._addFolder = async function() { if (!isAdmin()) return showToast('只读账户无法创建'); const name = prompt('新文件夹名称：'); if (!name||!validName(name)) return showToast('名称无效'); const c = getCurrentFS(); c.folders.push({ id: crypto.randomUUID(), name, passwordHash:'', passwordSalt:'', children:[] }); renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); } };
-    window._emptyTrash = async function() { if (!isAdmin()) return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; await apiCall('/empty-trash', 'POST', { scope: currentScope }); await loadFS(); };
-    window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
-    window._openSettings = function() { document.getElementById('settingsModal').classList.add('open'); updateSettingsThemeIcon(); };
-    window._openProfile = function() { document.getElementById('profileModal').classList.add('open'); };
-    window._openPasswordModal = function() { document.getElementById('passwordSubModal').classList.add('open'); };
-    window._openSecondPwdModal = function() { document.getElementById('secondPwdSubModal').classList.add('open'); };
-    window._openUsernameModal = function() { document.getElementById('usernameSubModal').classList.add('open'); };
-    window._openAvatarModal = function() { document.getElementById('avatarSubModal').classList.add('open'); };
-    window._openBgSettings = function() { document.getElementById('bgSubModal').classList.add('open'); };
-    window._logout = function() { logout(); };
-    window._toggleTheme = function() { document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); updateSettingsThemeIcon(); };
-    window._setBg = function(bg) { userBg = bg; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
-    window._uploadBackground = async function() {
-        const file = document.getElementById('backgroundUpload').files[0];
-        if (!file) return showToast('请选择背景图片');
-        if (file.size > 2 * 1024 * 1024) return showToast('背景图片不能超过2MB');
-        const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-        if (!allowedTypes.includes(file.type)) return showToast('仅支持 PNG、JPEG、WebP、GIF 格式');
-        showLoading(true);
-        try {
-            const reader = new FileReader();
-            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-            const res = await apiCall('/upload-background', 'POST', { data: dataUrl.split(',')[1], mime: file.type });
-            userBgImage = res.url; userBg = '';
-            localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', '');
-            applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open');
-        } catch(e) { showToast('上传失败: '+e.message); } finally { showLoading(false); }
-    };
-    window._resetBackground = function() { userBg = 'default'; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已重置'); };
-    window._updatePassword = async function() {
-        const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value;
-        if (!oldPwd||!newPwd) return showToast('请填写完整'); if (newPwd.length<6) return showToast('新密码至少6位'); if (newPwd!==conf) return showToast('两次输入不一致');
-        try { await apiCall('/update-profile','POST',{oldPassword:oldPwd,newPassword:newPwd}); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
-    };
-    window._updateSecondPwd = async function() {
-        const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value;
-        if (!oldS||!newS) return showToast('请填写完整'); if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字'); if (newS!==conf) return showToast('两次输入不一致');
-        try { await apiCall('/update-profile','POST',{oldSecondPassword:oldS,newSecondPassword:newS}); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
-    };
-    window._updateUsername = async function() {
-        const newName = document.getElementById('newUsername').value.trim();
-        if (!newName) return showToast('请输入新用户名');
-        try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); currentUser.username = res.newUsername; TokenManager.setToken(res.token); document.getElementById('profileUsername').textContent = res.newUsername; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
-    };
-    window._uploadAvatar = async function() {
-        const file = document.getElementById('avatarFileInput').files[0];
-        if (!file) return showToast('请选择头像图片');
-        if (file.size > 500 * 1024) return showToast('头像图片不能超过500KB');
-        showLoading(true);
-        try {
-            const reader = new FileReader();
-            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
-            const res = await apiCall('/upload-avatar','POST',{ data:dataUrl.split(',')[1], mime:file.type });
-            currentUser.avatar = res.avatarUrl;
-            document.getElementById('avatarImg').src = res.avatarUrl;
-            document.getElementById('profileAvatarImg').src = res.avatarUrl;
-            showToast('头像已更新');
-        } catch(e) { showToast(e.message); } finally { showLoading(false); }
-    };
-    window._saveAvatarUrl = async function() {
-        try {
-            const url = document.getElementById('avatarUrl').value.trim();
-            if (!/^https?:\/\//i.test(url)) { showToast('仅允许http或https图片地址'); return; }
-            currentUser.avatar = url;
-            document.getElementById('avatarImg').src = url;
-            document.getElementById('profileAvatarImg').src = url;
-            localStorage.setItem('user_avatar', url);
-            showToast('头像已更新');
-        } catch(err) { showToast(err.message); }
-    };
-    window._useGravatar = function() {
-        if (currentUser?.email) {
-            const email = currentUser.email.trim().toLowerCase();
-            const hash = md5(email);
-            document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${hash}?d=identicon`;
-        } else { showToast('未绑定邮箱'); }
-    };
-
-    // ================== 事件绑定 ==================
-    document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
-    document.getElementById('goLogin').onclick = () => { document.getElementById('registerPanel').style.display='none'; document.getElementById('loginPanel').style.display='flex'; };
-    document.getElementById('loginBackBtn').onclick = () => { document.getElementById('loginStep2').classList.add('hidden'); document.getElementById('loginStep1').classList.remove('hidden'); TokenManager.clear(); };
-    document.getElementById('registerBtn').onclick = async () => {
-        const u = document.getElementById('regUsername').value.trim(), em = document.getElementById('regEmail').value.trim(), p = document.getElementById('regPassword').value, cp = document.getElementById('regConfirmPwd').value, sp = document.getElementById('regSecondPwd').value.trim(), csp = document.getElementById('regConfirmSecondPwd').value.trim(), inv = document.getElementById('inviteCode').value.trim();
-        if (u.length<4||u.length>20) return showToast('用户名4-20字符'); if (em && !validEmail(em)) return showToast('邮箱格式不正确');
-        if (p.length<6) return showToast('密码至少6位'); if (p!==cp) return showToast('两次密码不一致');
-        if (!/^\d{6}$/.test(sp)) return showToast('二级密码需6位数字'); if (sp!==csp) return showToast('两次二级密码不一致'); if (!inv) return showToast('请输入邀请码');
-        try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
-    };
-    document.getElementById('loginNextBtn').onclick = async () => {
-        const acc = document.getElementById('loginUsername').value.trim(), pwd = document.getElementById('loginPassword').value;
-        if (!acc || !pwd) return showToast('请填写账号和密码');
-        try {
-            const res = await apiCall('/login','POST',{ username: acc, password: pwd });
-            TokenManager.setPartialToken(res.partialToken);
-            document.getElementById('loginAccountDisplay').textContent = res.username;
-            document.getElementById('loginStep1').classList.add('hidden');
-            document.getElementById('loginStep2').classList.remove('hidden');
-        } catch (e) { showToast(e.message); }
-    };
-    document.getElementById('loginConfirmBtn').onclick = async () => {
-        const sp = document.getElementById('loginSecondPwd').value.trim();
-        if (!/^\d{6}$/.test(sp)) return showToast('请输入6位数字');
-        try {
-            const data = await apiCall('/verify-second-password','POST',{ secondPassword: sp });
-            TokenManager.setToken(data.token);
-            TokenManager.clear('partialToken');
-            currentUser = { username: data.username, email: data.email, role: data.role, inviteCode: data.inviteCode, avatar: data.avatar };
-            document.getElementById('loginPanel').style.display = 'none';
-            document.getElementById('mainPanel').classList.add('active');
-            updateUserUI();
-            loadFS();
-            applyBackground();
-        } catch (e) { showToast(e.message); }
-    };
-
-    document.getElementById('previewClose').addEventListener('click', () => document.getElementById('previewModal').classList.remove('open'));
-    // 搜索
+    // ================== 搜索 ==================
     let searchTimer;
     document.getElementById('searchInput').addEventListener('input', () => {
         clearTimeout(searchTimer);
@@ -1006,6 +931,180 @@
         panel.classList.remove('hidden');
     }
 
+    // ================== 全局暴露函数 ==================
+    window._handleFileSelect = async function(input) { if (!input.files?.length) return; await uploadFiles(Array.from(input.files)); input.value = ''; };
+    window._triggerUpload = function() { if (!currentSelection) return showToast('请先选择子分类'); document.getElementById('hiddenFileInput').click(); };
+    window._downloadAction = function() { if (!currentSelection) return showToast('请先选择子分类'); if (!selectMode) { toggleSelectMode(true); renderFileView(currentSelection.folderId, currentSelection.subId); } else downloadSelectedFiles(); };
+    window._refresh = function() { loadFS(); };
+    window._toggleTrash = function() { const p = document.getElementById('trashPanel'); p.classList.toggle('hidden'); if (!p.classList.contains('hidden')) renderTrash(); };
+    window._exportStructure = function() { const c = getCurrentFS(); const blob = new Blob([JSON.stringify({ scope: currentScope, folders: c.folders, trash: c.trash }, null, 2)], { type:'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
+    window._switchScope = function(scope) { if (scope === currentScope) return; currentScope = scope; document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active')); document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active'); currentSelection = null; if (selectMode) toggleSelectMode(false); loadFS().then(() => { document.getElementById('fileView').innerHTML = ''; document.getElementById('trashPanel').classList.add('hidden'); }); };
+    window._addFolder = async function() { if (!isAdmin()) return showToast('只读账户无法创建'); const name = prompt('新文件夹名称：'); if (!name||!validName(name)) return showToast('名称无效'); const c = getCurrentFS(); c.folders.push({ id: crypto.randomUUID(), name, passwordHash:'', passwordSalt:'', children:[] }); renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); } };
+    window._emptyTrash = async function() { if (!isAdmin()) return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; await apiCall('/empty-trash', 'POST', { scope: currentScope }); await loadFS(); };
+    window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
+    window._openSettings = function() { document.getElementById('settingsModal').classList.add('open'); updateSettingsThemeIcon(); };
+    window._openProfile = function() { document.getElementById('profileModal').classList.add('open'); };
+    window._openPasswordModal = function() { document.getElementById('passwordSubModal').classList.add('open'); };
+    window._openSecondPwdModal = function() { document.getElementById('secondPwdSubModal').classList.add('open'); };
+    window._openUsernameModal = function() { document.getElementById('usernameSubModal').classList.add('open'); };
+    window._openAvatarModal = function() { document.getElementById('avatarSubModal').classList.add('open'); };
+    window._openBgSettings = function() { document.getElementById('bgSubModal').classList.add('open'); };
+    window._logout = function() { logout(); };
+    window._toggleTheme = function() { document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); updateSettingsThemeIcon(); };
+    window._setBg = function(bg) { userBg = bg; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open'); };
+    window._uploadBackground = async function() {
+        const file = document.getElementById('backgroundUpload').files[0];
+        if (!file) return showToast('请选择背景图片');
+        if (file.size > 2 * 1024 * 1024) return showToast('背景图片不能超过2MB');
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+        if (!allowedTypes.includes(file.type)) return showToast('仅支持 PNG、JPEG、WebP、GIF 格式');
+        showLoading(true);
+        try {
+            const reader = new FileReader();
+            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
+            const res = await apiCall('/upload-background', 'POST', { data: dataUrl.split(',')[1], mime: file.type });
+            userBgImage = res.data.backgroundUrl || res.backgroundUrl;
+            userBg = '';
+            localStorage.setItem('userBgImage', userBgImage); localStorage.setItem('userBg', '');
+            applyBackground(); showToast('背景已更新'); document.getElementById('bgSubModal').classList.remove('open');
+        } catch(e) { showToast('上传失败: '+e.message); } finally { showLoading(false); }
+    };
+    window._resetBackground = function() { userBg = 'default'; userBgImage = ''; localStorage.setItem('userBg', userBg); localStorage.setItem('userBgImage', ''); applyBackground(); showToast('背景已重置'); };
+    window._updatePassword = async function() {
+        const oldPwd = document.getElementById('oldPassword').value, newPwd = document.getElementById('newPassword').value, conf = document.getElementById('confirmNewPassword').value;
+        if (!oldPwd||!newPwd) return showToast('请填写完整'); if (newPwd.length<6) return showToast('新密码至少6位'); if (newPwd!==conf) return showToast('两次输入不一致');
+        try { await apiCall('/update-profile','POST',{oldPassword:oldPwd,newPassword:newPwd}); showToast('密码已更新'); document.getElementById('passwordSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+    };
+    window._updateSecondPwd = async function() {
+        const oldS = document.getElementById('oldSecondPwd').value, newS = document.getElementById('newSecondPwd').value, conf = document.getElementById('confirmNewSecondPwd').value;
+        if (!oldS||!newS) return showToast('请填写完整'); if (!/^\d{6}$/.test(newS)) return showToast('新二级密码需6位数字'); if (newS!==conf) return showToast('两次输入不一致');
+        try { await apiCall('/update-profile','POST',{oldSecondPassword:oldS,newSecondPassword:newS}); showToast('二级密码已更新'); document.getElementById('secondPwdSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+    };
+    window._updateUsername = async function() {
+        const newName = document.getElementById('newUsername').value.trim();
+        if (!newName) return showToast('请输入新用户名');
+        try { const res = await apiCall('/update-profile','POST',{newUsername:newName}); const token = res.data?.token || res.token; if (token) TokenManager.setToken(token); currentUser.username = res.data?.newUsername || res.newUsername; document.getElementById('profileUsername').textContent = currentUser.username; showToast('用户名已更新'); document.getElementById('usernameSubModal').classList.remove('open'); } catch(e) { showToast(e.message); }
+    };
+    window._uploadAvatar = async function() {
+        const file = document.getElementById('avatarFileInput').files[0];
+        if (!file) return showToast('请选择头像图片');
+        if (file.size > 500 * 1024) return showToast('头像图片不能超过500KB');
+        showLoading(true);
+        try {
+            const reader = new FileReader();
+            const dataUrl = await new Promise((res,rej)=>{ reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); });
+            const res = await apiCall('/upload-avatar','POST',{ data:dataUrl.split(',')[1], mime:file.type });
+            currentUser.avatar = res.data?.avatarUrl || res.avatarUrl;
+            document.getElementById('avatarImg').src = currentUser.avatar;
+            document.getElementById('profileAvatarImg').src = currentUser.avatar;
+            showToast('头像已更新');
+        } catch(e) { showToast(e.message); } finally { showLoading(false); }
+    };
+    window._saveAvatarUrl = async function() {
+        try {
+            const url = document.getElementById('avatarUrl').value.trim();
+            if (!/^https?:\/\//i.test(url)) { showToast('仅允许http或https图片地址'); return; }
+            currentUser.avatar = url;
+            document.getElementById('avatarImg').src = url;
+            document.getElementById('profileAvatarImg').src = url;
+            localStorage.setItem('user_avatar', url);
+            showToast('头像已更新');
+        } catch(err) { showToast(err.message); }
+    };
+    window._useGravatar = function() {
+        if (currentUser?.email) {
+            const email = currentUser.email.trim().toLowerCase();
+            const hash = md5(email);
+            document.getElementById('avatarUrl').value = `https://www.gravatar.com/avatar/${hash}?d=identicon`;
+        } else { showToast('未绑定邮箱'); }
+    };
+
+    // ================== 登录流程（防重复 + 调试日志） ==================
+    let loginLock = false;
+    document.getElementById('loginNextBtn').onclick = async function() {
+        if (loginLock) return;
+        const acc = document.getElementById('loginUsername').value.trim();
+        const pwd = document.getElementById('loginPassword').value;
+        if (!acc || !pwd) return showToast('请填写账号和密码');
+
+        loginLock = true;
+        this.disabled = true;
+        console.log('[Login Step1] 开始登录第一步', acc);
+        try {
+            const res = await apiCall('/login', 'POST', { username: acc, password: pwd });
+            console.log('[Login Step1] 成功，获得 partial token');
+            const partialToken = res.data?.partialToken || res.partialToken;
+            TokenManager.setPartialToken(partialToken);
+            document.getElementById('loginAccountDisplay').textContent = res.data?.username || res.username;
+            document.getElementById('loginStep1').classList.add('hidden');
+            document.getElementById('loginStep2').classList.remove('hidden');
+        } catch (e) {
+            console.error('[Login Step1] 失败:', e);
+            showToast(e.message || '登录失败');
+        } finally {
+            loginLock = false;
+            this.disabled = false;
+        }
+    };
+
+    document.getElementById('loginConfirmBtn').onclick = async function() {
+        if (loginLock) return;
+        const sp = document.getElementById('loginSecondPwd').value.trim();
+        if (!/^\d{6}$/.test(sp)) return showToast('请输入6位数字');
+
+        loginLock = true;
+        this.disabled = true;
+        console.log('[Login Step2] 验证二级密码');
+        try {
+            const data = await apiCall('/verify-second-password', 'POST', { secondPassword: sp });
+            console.log('[Login Step2] 成功，获得完整 token');
+            const fullToken = data.data?.token || data.token;
+            TokenManager.setToken(fullToken);
+            TokenManager.removePartialToken(); // 仅移除 partialToken
+            const userInfo = data.data || data;
+            currentUser = {
+                username: userInfo.username,
+                email: userInfo.email,
+                role: userInfo.role,
+                inviteCode: userInfo.inviteCode,
+                avatar: userInfo.avatar
+            };
+            document.getElementById('loginPanel').style.display = 'none';
+            document.getElementById('mainPanel').classList.add('active');
+            updateUserUI();
+            loadFS();
+            applyBackground();
+        } catch (e) {
+            console.error('[Login Step2] 失败:', e);
+            showToast(e.message || '登录失败');
+        } finally {
+            loginLock = false;
+            this.disabled = false;
+        }
+    };
+
+    // 注册/返回登录等事件
+    document.getElementById('goRegister').onclick = () => { document.getElementById('loginPanel').style.display='none'; document.getElementById('registerPanel').style.display='flex'; };
+    document.getElementById('goLogin').onclick = () => { document.getElementById('registerPanel').style.display='none'; document.getElementById('loginPanel').style.display='flex'; };
+    document.getElementById('loginBackBtn').onclick = () => { document.getElementById('loginStep2').classList.add('hidden'); document.getElementById('loginStep1').classList.remove('hidden'); TokenManager.removePartialToken(); };
+    document.getElementById('registerBtn').onclick = async () => {
+        const u = document.getElementById('regUsername').value.trim(), em = document.getElementById('regEmail').value.trim(), p = document.getElementById('regPassword').value, cp = document.getElementById('regConfirmPwd').value, sp = document.getElementById('regSecondPwd').value.trim(), csp = document.getElementById('regConfirmSecondPwd').value.trim(), inv = document.getElementById('inviteCode').value.trim();
+        if (u.length<4||u.length>20) return showToast('用户名4-20字符'); if (em && !validEmail(em)) return showToast('邮箱格式不正确');
+        if (p.length<6) return showToast('密码至少6位'); if (p!==cp) return showToast('两次密码不一致');
+        if (!/^\d{6}$/.test(sp)) return showToast('二级密码需6位数字'); if (sp!==csp) return showToast('两次二级密码不一致'); if (!inv) return showToast('请输入邀请码');
+        try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.data?.inviteCode || res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
+    };
+
+    document.getElementById('previewClose').addEventListener('click', () => document.getElementById('previewModal').classList.remove('open'));
+    document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
+    document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
+    document.getElementById('cancelPasswordBtn').addEventListener('click', () => document.getElementById('passwordSubModal').classList.remove('open'));
+    document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => document.getElementById('secondPwdSubModal').classList.remove('open'));
+    document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
+    document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
+    document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
+
+    // 启动应用
     initApp();
 })();
 </script>
