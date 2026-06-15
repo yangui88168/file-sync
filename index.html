@@ -1095,15 +1095,69 @@
         try { const res = await apiCall('/register','POST',{username:u,email:em,password:p,secondPassword:sp,inviteCode:inv}); alert(`注册成功！您的专属邀请码是：${res.data?.inviteCode || res.inviteCode}`); document.getElementById('goLogin').click(); } catch(e) { showToast(e.message); }
     };
 
-    document.getElementById('previewClose').addEventListener('click', () => document.getElementById('previewModal').classList.remove('open'));
-    document.getElementById('closeProfileModal').addEventListener('click', () => document.getElementById('profileModal').classList.remove('open'));
-    document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
-    document.getElementById('cancelPasswordBtn').addEventListener('click', () => document.getElementById('passwordSubModal').classList.remove('open'));
-    document.getElementById('cancelSecondPwdBtn').addEventListener('click', () => document.getElementById('secondPwdSubModal').classList.remove('open'));
-    document.getElementById('cancelUsernameBtn').addEventListener('click', () => document.getElementById('usernameSubModal').classList.remove('open'));
-    document.getElementById('cancelAvatarBtn').addEventListener('click', () => document.getElementById('avatarSubModal').classList.remove('open'));
-    document.getElementById('cancelBgBtn').addEventListener('click', () => document.getElementById('bgSubModal').classList.remove('open'));
+    const previewClose = document.getElementById('previewClose');
+if (previewClose) {
+    previewClose.addEventListener('click', () => {
+        document.getElementById('previewModal')
+            ?.classList.remove('open');
+    });
+}
 
+const closeProfileModal = document.getElementById('closeProfileModal');
+if (closeProfileModal) {
+    closeProfileModal.addEventListener('click', () => {
+        document.getElementById('profileModal')
+            ?.classList.remove('open');
+    });
+}
+
+const closeSettingsModal = document.getElementById('closeSettingsModal');
+if (closeSettingsModal) {
+    closeSettingsModal.addEventListener('click', () => {
+        document.getElementById('settingsModal')
+            ?.classList.remove('open');
+    });
+}
+
+const cancelPasswordBtn = document.getElementById('cancelPasswordBtn');
+if (cancelPasswordBtn) {
+    cancelPasswordBtn.addEventListener('click', () => {
+        document.getElementById('passwordSubModal')
+            ?.classList.remove('open');
+    });
+}
+
+const cancelSecondPwdBtn = document.getElementById('cancelSecondPwdBtn');
+if (cancelSecondPwdBtn) {
+    cancelSecondPwdBtn.addEventListener('click', () => {
+        document.getElementById('secondPwdSubModal')
+            ?.classList.remove('open');
+    });
+}
+
+const cancelUsernameBtn = document.getElementById('cancelUsernameBtn');
+if (cancelUsernameBtn) {
+    cancelUsernameBtn.addEventListener('click', () => {
+        document.getElementById('usernameSubModal')
+            ?.classList.remove('open');
+    });
+}
+
+const cancelAvatarBtn = document.getElementById('cancelAvatarBtn');
+if (cancelAvatarBtn) {
+    cancelAvatarBtn.addEventListener('click', () => {
+        document.getElementById('avatarSubModal')
+            ?.classList.remove('open');
+    });
+}
+
+const cancelBgBtn = document.getElementById('cancelBgBtn');
+if (cancelBgBtn) {
+    cancelBgBtn.addEventListener('click', () => {
+        document.getElementById('bgSubModal')
+            ?.classList.remove('open');
+    });
+}
     // 启动应用
     initApp();
 })();
