@@ -27,7 +27,6 @@ connect-src 'self'
 ">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
     <style>
-        /* 样式不变，与之前完全相同（此处省略以节省篇幅，请使用你已有的完整样式） */
         :root {
             --bg: #f0f2f5; --card-bg: #ffffff; --text: #1e293b; --text-secondary: #64748b;
             --border: #e2e8f0; --hover: #f1f5f9; --shadow: rgba(0,0,0,0.05);
@@ -120,215 +119,215 @@ connect-src 'self'
     </style>
 </head>
 <body>
-<!-- 登录面板 -->
-<div id="loginPanel" class="auth-container">
-    <h1>🏠 龙铭仓库</h1>
-    <div id="loginStep1">
-        <div class="input-group"><label>用户名或邮箱</label><input type="text" id="loginUsername" autocomplete="username"></div>
-        <div class="input-group"><label>密码</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
-        <button class="auth-btn" id="loginNextBtn">下一步</button>
-        <div style="text-align:center;margin-top:0.5rem;"><a id="goRegister" style="cursor:pointer;color:var(--primary);font-size:0.9rem;">注册新账号</a></div>
-    </div>
-    <div id="loginStep2" class="hidden">
-        <div style="text-align:center;padding:0.5rem 0;">账号 <strong id="loginAccountDisplay"></strong></div>
-        <div class="input-group"><label>二级密码（6位数字）</label><input type="password" id="loginSecondPwd" maxlength="6" inputmode="numeric"></div>
-        <button class="auth-btn" id="loginConfirmBtn">登录</button>
-        <button class="auth-btn secondary" id="loginBackBtn">返回上一步</button>
-    </div>
-</div>
-
-<!-- 注册面板 -->
-<div id="registerPanel" class="auth-container" style="display:none;">
-    <h1>注册龙铭仓库</h1>
-    <div class="input-group"><label>用户名（4-20字符）</label><input type="text" id="regUsername"></div>
-    <div class="input-group"><label>邮箱（可选）</label><input type="email" id="regEmail"></div>
-    <div class="input-group"><label>密码（至少6位）</label><input type="password" id="regPassword"></div>
-    <div class="input-group"><label>确认密码</label><input type="password" id="regConfirmPwd"></div>
-    <div class="input-group"><label>二级密码（6位数字）</label><input type="password" id="regSecondPwd" maxlength="6" inputmode="numeric"></div>
-    <div class="input-group"><label>确认二级密码</label><input type="password" id="regConfirmSecondPwd" maxlength="6" inputmode="numeric"></div>
-    <div class="input-group"><label>邀请码</label><input type="text" id="inviteCode"></div>
-    <button class="auth-btn" id="registerBtn">注册</button>
-    <div style="text-align:center;"><a id="goLogin" style="cursor:pointer;color:var(--primary);font-size:0.9rem;">返回登录</a></div>
-</div>
-
-<!-- 主界面 -->
-<div id="mainPanel" class="main-container">
-    <div class="toolbar">
-        <div class="toolbar-left">
-            <button class="sidebar-toggle" id="sidebarToggle"><i class="fas fa-bars"></i></button>
-            <img id="avatarImg" class="avatar-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23ddd'/%3E%3C/svg%3E" title="个人主页" onclick="window._openProfile()" />
-            <button class="toolbar-btn" id="uploadBtn" onclick="window._triggerUpload()"><i class="fas fa-upload"></i> 上传</button>
-            <button class="toolbar-btn outline" id="downloadBtn" onclick="window._downloadAction()"><i class="fas fa-download"></i> 下载</button>
-            <button class="toolbar-btn outline" id="refreshBtn" onclick="window._refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
-            <button class="toolbar-btn outline" id="trashBtn" onclick="window._toggleTrash()"><i class="fas fa-trash"></i> 回收站</button>
-            <button class="toolbar-btn outline" id="exportStructureBtn" onclick="window._exportStructure()" title="仅导出目录结构"><i class="fas fa-file-export"></i> 导出结构</button>
+    <!-- 登录面板 -->
+    <div id="loginPanel" class="auth-container">
+        <h1>🏠 龙铭仓库</h1>
+        <div id="loginStep1">
+            <div class="input-group"><label>用户名或邮箱</label><input type="text" id="loginUsername" autocomplete="username"></div>
+            <div class="input-group"><label>密码</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+            <button class="auth-btn" id="loginNextBtn">下一步</button>
+            <div style="text-align:center;margin-top:0.5rem;"><a id="goRegister" style="cursor:pointer;color:var(--primary);font-size:0.9rem;">注册新账号</a></div>
         </div>
-        <div class="toolbar-right">
-            <button class="settings-icon" id="settingsBtn" onclick="window._openSettings()" title="设置"><i class="fas fa-cog"></i></button>
+        <div id="loginStep2" class="hidden">
+            <div style="text-align:center;padding:0.5rem 0;">账号 <strong id="loginAccountDisplay"></strong></div>
+            <div class="input-group"><label>二级密码（6位数字）</label><input type="password" id="loginSecondPwd" maxlength="6" inputmode="numeric"></div>
+            <button class="auth-btn" id="loginConfirmBtn">登录</button>
+            <button class="auth-btn secondary" id="loginBackBtn">返回上一步</button>
         </div>
     </div>
-    <div class="content-area">
-        <div class="sidebar" id="sidebar">
-            <div class="scope-switch">
-                <button class="scope-tab active" data-scope="public" onclick="window._switchScope('public')">🌐 公共资料</button>
-                <button class="scope-tab private" data-scope="private" onclick="window._switchScope('private')">🔒 我的空间</button>
+
+    <!-- 注册面板 -->
+    <div id="registerPanel" class="auth-container" style="display:none;">
+        <h1>注册龙铭仓库</h1>
+        <div class="input-group"><label>用户名（4-20字符）</label><input type="text" id="regUsername"></div>
+        <div class="input-group"><label>邮箱（可选）</label><input type="email" id="regEmail"></div>
+        <div class="input-group"><label>密码（至少6位）</label><input type="password" id="regPassword"></div>
+        <div class="input-group"><label>确认密码</label><input type="password" id="regConfirmPwd"></div>
+        <div class="input-group"><label>二级密码（6位数字）</label><input type="password" id="regSecondPwd" maxlength="6" inputmode="numeric"></div>
+        <div class="input-group"><label>确认二级密码</label><input type="password" id="regConfirmSecondPwd" maxlength="6" inputmode="numeric"></div>
+        <div class="input-group"><label>邀请码</label><input type="text" id="inviteCode"></div>
+        <button class="auth-btn" id="registerBtn">注册</button>
+        <div style="text-align:center;"><a id="goLogin" style="cursor:pointer;color:var(--primary);font-size:0.9rem;">返回登录</a></div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainPanel" class="main-container">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button class="sidebar-toggle" id="sidebarToggle"><i class="fas fa-bars"></i></button>
+                <img id="avatarImg" class="avatar-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23ddd'/%3E%3C/svg%3E" title="个人主页" onclick="window._openProfile()" />
+                <button class="toolbar-btn" id="uploadBtn" onclick="window._triggerUpload()"><i class="fas fa-upload"></i> 上传</button>
+                <button class="toolbar-btn outline" id="downloadBtn" onclick="window._downloadAction()"><i class="fas fa-download"></i> 下载</button>
+                <button class="toolbar-btn outline" id="refreshBtn" onclick="window._refresh()"><i class="fas fa-sync-alt"></i> 刷新</button>
+                <button class="toolbar-btn outline" id="trashBtn" onclick="window._toggleTrash()"><i class="fas fa-trash"></i> 回收站</button>
+                <button class="toolbar-btn outline" id="exportStructureBtn" onclick="window._exportStructure()" title="仅导出目录结构"><i class="fas fa-file-export"></i> 导出结构</button>
             </div>
-            <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名" autocomplete="off">
-            <div id="searchResults" class="search-results hidden"></div>
-            <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;" onclick="window._addFolder()">+ 新建文件夹</button>
-            <ul class="tree" id="treeRoot"></ul>
-            <div id="trashPanel" class="hidden" style="margin-top:1rem;">
-                <hr style="border-color:var(--border);">
-                <h4 style="display:flex;justify-content:space-between;color:var(--text);">回收站 <button id="emptyTrashBtn" class="toolbar-btn outline" style="font-size:0.7rem;padding:0.2rem 0.5rem;" onclick="window._emptyTrash()">清空</button></h4>
-                <ul id="trashList" style="list-style:none;color:var(--text);"></ul>
+            <div class="toolbar-right">
+                <button class="settings-icon" id="settingsBtn" onclick="window._openSettings()" title="设置"><i class="fas fa-cog"></i></button>
             </div>
         </div>
-        <div class="file-view" id="fileView">
-            <h2 style="color:var(--text-secondary);">欢迎使用龙铭仓库</h2>
-            <p style="color:var(--text-secondary);">请从左侧选择文件夹和子分类</p>
-        </div>
-    </div>
-    <div class="progress-container" id="progressContainer">
-        <div class="upload-status" id="uploadStatus"></div>
-        <div class="progress-bar" id="progressBar"></div>
-    </div>
-</div>
-
-<!-- 加载遮罩 -->
-<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
-<!-- Toast 消息 -->
-<div class="toast" id="toast"></div>
-
-<!-- 编辑文件模态框 -->
-<div class="modal-overlay" id="editorModal">
-    <div class="modal-content">
-        <h3>编辑文件：<span id="editorFileName" style="color:var(--primary);"></span></h3>
-        <textarea id="editorTextarea"></textarea>
-        <div style="display:flex;gap:1rem;margin-top:1rem;justify-content:flex-end;">
-            <button class="auth-btn secondary" id="editorCancel">取消</button>
-            <button class="auth-btn" id="editorSave">保存 (Ctrl+S)</button>
-        </div>
-    </div>
-</div>
-
-<!-- 个人主页模态框 -->
-<div class="modal-overlay" id="profileModal">
-    <div class="modal-content" style="width:420px;">
-        <div style="text-align:center;"><img id="profileAvatarImg" class="avatar-img-large" src="" /><h3 id="profileUsername" style="margin-top:0.5rem;"></h3></div>
-        <hr style="border-color:var(--border);margin:1rem 0;">
-        <div style="display:flex;flex-direction:column;gap:0.8rem;">
-            <div style="display:flex;gap:0.5rem;align-items:center;">
-                <span style="white-space:nowrap;">邀请码：</span>
-                <input type="text" id="myInviteCode" readonly style="flex:1;background:var(--card-bg);border:1px solid var(--border);padding:0.5rem;border-radius:8px;color:var(--text);" />
-                <button class="auth-btn" id="copyInviteBtn" onclick="window._copyInviteCode()" style="width:auto;padding:0.5rem 1rem;">复制</button>
+        <div class="content-area">
+            <div class="sidebar" id="sidebar">
+                <div class="scope-switch">
+                    <button class="scope-tab active" data-scope="public" onclick="window._switchScope('public')">🌐 公共资料</button>
+                    <button class="scope-tab private" data-scope="private" onclick="window._switchScope('private')">🔒 我的空间</button>
+                </div>
+                <input type="text" class="search-box" id="searchInput" placeholder="🔍 搜索文件名" autocomplete="off">
+                <div id="searchResults" class="search-results hidden"></div>
+                <button id="addFolderBtn" class="toolbar-btn" style="margin-bottom:0.75rem;width:100%;" onclick="window._addFolder()">+ 新建文件夹</button>
+                <ul class="tree" id="treeRoot"></ul>
+                <div id="trashPanel" class="hidden" style="margin-top:1rem;">
+                    <hr style="border-color:var(--border);">
+                    <h4 style="display:flex;justify-content:space-between;color:var(--text);">回收站 <button id="emptyTrashBtn" class="toolbar-btn outline" style="font-size:0.7rem;padding:0.2rem 0.5rem;" onclick="window._emptyTrash()">清空</button></h4>
+                    <ul id="trashList" style="list-style:none;color:var(--text);"></ul>
+                </div>
             </div>
-            <button class="auth-btn secondary" onclick="window._openPasswordModal()">修改密码</button>
-            <button class="auth-btn secondary" onclick="window._openSecondPwdModal()">修改二级密码</button>
-            <button class="auth-btn secondary" onclick="window._openUsernameModal()">修改用户名</button>
-            <button class="auth-btn secondary" onclick="window._openAvatarModal()">修改头像</button>
-        </div>
-        <button class="auth-btn secondary" id="closeProfileModal" style="margin-top:1rem;">关闭</button>
-    </div>
-</div>
-
-<!-- 修改密码模态框 -->
-<div class="modal-overlay" id="passwordSubModal">
-    <div class="modal-content" style="width:400px;">
-        <h3>修改密码</h3>
-        <input type="password" id="oldPassword" placeholder="原密码"><br><br>
-        <input type="password" id="newPassword" placeholder="新密码（至少6位）"><br><br>
-        <input type="password" id="confirmNewPassword" placeholder="确认新密码"><br><br>
-        <button class="auth-btn" onclick="window._updatePassword()">更新密码</button>
-        <button class="auth-btn secondary" id="cancelPasswordBtn" style="margin-top:0.5rem;">取消</button>
-    </div>
-</div>
-
-<!-- 修改二级密码模态框 -->
-<div class="modal-overlay" id="secondPwdSubModal">
-    <div class="modal-content" style="width:400px;">
-        <h3>修改二级密码</h3>
-        <input type="password" id="oldSecondPwd" placeholder="原二级密码"><br><br>
-        <input type="password" id="newSecondPwd" placeholder="新二级密码（6位数字）" maxlength="6"><br><br>
-        <input type="password" id="confirmNewSecondPwd" placeholder="确认新二级密码" maxlength="6"><br><br>
-        <button class="auth-btn" onclick="window._updateSecondPwd()">更新</button>
-        <button class="auth-btn secondary" id="cancelSecondPwdBtn" style="margin-top:0.5rem;">取消</button>
-    </div>
-</div>
-
-<!-- 修改用户名模态框 -->
-<div class="modal-overlay" id="usernameSubModal">
-    <div class="modal-content" style="width:400px;">
-        <h3>修改用户名</h3>
-        <input type="text" id="newUsername" placeholder="新用户名（4-20字符）"><br><br>
-        <button class="auth-btn" onclick="window._updateUsername()">更新</button>
-        <button class="auth-btn secondary" id="cancelUsernameBtn" style="margin-top:0.5rem;">取消</button>
-    </div>
-</div>
-
-<!-- 修改头像模态框 -->
-<div class="modal-overlay" id="avatarSubModal">
-    <div class="modal-content" style="width:400px;">
-        <h3>修改头像</h3>
-        <input type="file" id="avatarFileInput" accept="image/*" /><br><br>
-        <button class="auth-btn" onclick="window._uploadAvatar()">上传头像</button>
-        <div style="margin-top:1rem;">
-            <label>或输入图片 URL</label>
-            <input type="text" id="avatarUrl" placeholder="https://example.com/avatar.jpg"><br><br>
-            <button class="auth-btn" onclick="window._saveAvatarUrl()">保存 URL</button>
-            <button class="auth-btn secondary" onclick="window._useGravatar()" style="margin-top:0.5rem;">使用 Gravatar</button>
-        </div>
-        <button class="auth-btn secondary" id="cancelAvatarBtn" style="margin-top:1rem;">取消</button>
-    </div>
-</div>
-
-<!-- 设置模态框 -->
-<div class="modal-overlay" id="settingsModal">
-    <div class="modal-content" style="width:420px;">
-        <h3><i class="fas fa-cog"></i> 设置</h3>
-        <hr style="border-color:var(--border);margin:1rem 0;">
-        <div style="display:flex;flex-direction:column;gap:1rem;">
-            <button class="auth-btn secondary" onclick="window._openBgSettings()">更换背景</button>
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span>深色模式</span>
-                <button id="themeToggleSettings" class="theme-toggle" onclick="window._toggleTheme()"><i class="fas fa-moon"></i></button>
+            <div class="file-view" id="fileView">
+                <h2 style="color:var(--text-secondary);">欢迎使用龙铭仓库</h2>
+                <p style="color:var(--text-secondary);">请从左侧选择文件夹和子分类</p>
             </div>
-            <button class="auth-btn secondary" onclick="window._logout()">退出登录</button>
         </div>
-        <button class="auth-btn secondary" id="closeSettingsModal" style="margin-top:1rem;">关闭</button>
-    </div>
-</div>
-
-<!-- 背景设置模态框 -->
-<div class="modal-overlay" id="bgSubModal">
-    <div class="modal-content" style="width:420px;">
-        <h3>更换背景</h3>
-        <label>选择预设背景：</label>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
-            <button class="bg-preset" data-bg="default" style="width:40px;height:40px;border-radius:8px;background:#f0f2f5;border:2px solid var(--border);" onclick="window._setBg('default')"></button>
-            <button class="bg-preset" data-bg="gradient1" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);" onclick="window._setBg('gradient1')"></button>
-            <button class="bg-preset" data-bg="gradient2" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" onclick="window._setBg('gradient2')"></button>
-            <button class="bg-preset" data-bg="gradient3" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);" onclick="window._setBg('gradient3')"></button>
+        <div class="progress-container" id="progressContainer">
+            <div class="upload-status" id="uploadStatus"></div>
+            <div class="progress-bar" id="progressBar"></div>
         </div>
-        <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem;">
-            <label>上传背景图片（仅支持 JPG/PNG/WebP，最大2MB）</label>
-            <input type="file" id="backgroundUpload" accept="image/*" /><br><br>
-            <button class="auth-btn" onclick="window._uploadBackground()">上传背景</button>
-            <button class="auth-btn secondary" onclick="window._resetBackground()" style="margin-top:0.5rem;">重置背景</button>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div></div>
+    <!-- Toast 消息 -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 编辑文件模态框 -->
+    <div class="modal-overlay" id="editorModal">
+        <div class="modal-content">
+            <h3>编辑文件：<span id="editorFileName" style="color:var(--primary);"></span></h3>
+            <textarea id="editorTextarea"></textarea>
+            <div style="display:flex;gap:1rem;margin-top:1rem;justify-content:flex-end;">
+                <button class="auth-btn secondary" id="editorCancel">取消</button>
+                <button class="auth-btn" id="editorSave">保存 (Ctrl+S)</button>
+            </div>
         </div>
-        <button class="auth-btn secondary" id="cancelBgBtn" style="margin-top:0.5rem;">取消</button>
     </div>
-</div>
 
-<!-- 图片预览模态框 -->
-<div class="modal-overlay" id="previewModal">
-    <div class="modal-content" style="text-align:center; background:var(--card-bg);">
-        <span id="previewClose" style="position:absolute;right:1rem;top:1rem;cursor:pointer;font-size:1.5rem;color:var(--text);">&times;</span>
-        <img id="previewImage" style="max-width:100%;max-height:70vh;" />
+    <!-- 个人主页模态框 -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal-content" style="width:420px;">
+            <div style="text-align:center;"><img id="profileAvatarImg" class="avatar-img-large" src="" /><h3 id="profileUsername" style="margin-top:0.5rem;"></h3></div>
+            <hr style="border-color:var(--border);margin:1rem 0;">
+            <div style="display:flex;flex-direction:column;gap:0.8rem;">
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <span style="white-space:nowrap;">邀请码：</span>
+                    <input type="text" id="myInviteCode" readonly style="flex:1;background:var(--card-bg);border:1px solid var(--border);padding:0.5rem;border-radius:8px;color:var(--text);" />
+                    <button class="auth-btn" id="copyInviteBtn" onclick="window._copyInviteCode()" style="width:auto;padding:0.5rem 1rem;">复制</button>
+                </div>
+                <button class="auth-btn secondary" onclick="window._openPasswordModal()">修改密码</button>
+                <button class="auth-btn secondary" onclick="window._openSecondPwdModal()">修改二级密码</button>
+                <button class="auth-btn secondary" onclick="window._openUsernameModal()">修改用户名</button>
+                <button class="auth-btn secondary" onclick="window._openAvatarModal()">修改头像</button>
+            </div>
+            <button class="auth-btn secondary" id="closeProfileModal" style="margin-top:1rem;">关闭</button>
+        </div>
     </div>
-</div>
 
-<!-- 隐藏的文件选择框 -->
-<input type="file" id="hiddenFileInput" style="display:none;" multiple onchange="window._handleFileSelect(this)">
+    <!-- 修改密码模态框 -->
+    <div class="modal-overlay" id="passwordSubModal">
+        <div class="modal-content" style="width:400px;">
+            <h3>修改密码</h3>
+            <input type="password" id="oldPassword" placeholder="原密码"><br><br>
+            <input type="password" id="newPassword" placeholder="新密码（至少6位）"><br><br>
+            <input type="password" id="confirmNewPassword" placeholder="确认新密码"><br><br>
+            <button class="auth-btn" onclick="window._updatePassword()">更新密码</button>
+            <button class="auth-btn secondary" id="cancelPasswordBtn" style="margin-top:0.5rem;">取消</button>
+        </div>
+    </div>
+
+    <!-- 修改二级密码模态框 -->
+    <div class="modal-overlay" id="secondPwdSubModal">
+        <div class="modal-content" style="width:400px;">
+            <h3>修改二级密码</h3>
+            <input type="password" id="oldSecondPwd" placeholder="原二级密码"><br><br>
+            <input type="password" id="newSecondPwd" placeholder="新二级密码（6位数字）" maxlength="6"><br><br>
+            <input type="password" id="confirmNewSecondPwd" placeholder="确认新二级密码" maxlength="6"><br><br>
+            <button class="auth-btn" onclick="window._updateSecondPwd()">更新</button>
+            <button class="auth-btn secondary" id="cancelSecondPwdBtn" style="margin-top:0.5rem;">取消</button>
+        </div>
+    </div>
+
+    <!-- 修改用户名模态框 -->
+    <div class="modal-overlay" id="usernameSubModal">
+        <div class="modal-content" style="width:400px;">
+            <h3>修改用户名</h3>
+            <input type="text" id="newUsername" placeholder="新用户名（4-20字符）"><br><br>
+            <button class="auth-btn" onclick="window._updateUsername()">更新</button>
+            <button class="auth-btn secondary" id="cancelUsernameBtn" style="margin-top:0.5rem;">取消</button>
+        </div>
+    </div>
+
+    <!-- 修改头像模态框 -->
+    <div class="modal-overlay" id="avatarSubModal">
+        <div class="modal-content" style="width:400px;">
+            <h3>修改头像</h3>
+            <input type="file" id="avatarFileInput" accept="image/*" /><br><br>
+            <button class="auth-btn" onclick="window._uploadAvatar()">上传头像</button>
+            <div style="margin-top:1rem;">
+                <label>或输入图片 URL</label>
+                <input type="text" id="avatarUrl" placeholder="https://example.com/avatar.jpg"><br><br>
+                <button class="auth-btn" onclick="window._saveAvatarUrl()">保存 URL</button>
+                <button class="auth-btn secondary" onclick="window._useGravatar()" style="margin-top:0.5rem;">使用 Gravatar</button>
+            </div>
+            <button class="auth-btn secondary" id="cancelAvatarBtn" style="margin-top:1rem;">取消</button>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content" style="width:420px;">
+            <h3><i class="fas fa-cog"></i> 设置</h3>
+            <hr style="border-color:var(--border);margin:1rem 0;">
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+                <button class="auth-btn secondary" onclick="window._openBgSettings()">更换背景</button>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>深色模式</span>
+                    <button id="themeToggleSettings" class="theme-toggle" onclick="window._toggleTheme()"><i class="fas fa-moon"></i></button>
+                </div>
+                <button class="auth-btn secondary" onclick="window._logout()">退出登录</button>
+            </div>
+            <button class="auth-btn secondary" id="closeSettingsModal" style="margin-top:1rem;">关闭</button>
+        </div>
+    </div>
+
+    <!-- 背景设置模态框 -->
+    <div class="modal-overlay" id="bgSubModal">
+        <div class="modal-content" style="width:420px;">
+            <h3>更换背景</h3>
+            <label>选择预设背景：</label>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+                <button class="bg-preset" data-bg="default" style="width:40px;height:40px;border-radius:8px;background:#f0f2f5;border:2px solid var(--border);" onclick="window._setBg('default')"></button>
+                <button class="bg-preset" data-bg="gradient1" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);" onclick="window._setBg('gradient1')"></button>
+                <button class="bg-preset" data-bg="gradient2" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);" onclick="window._setBg('gradient2')"></button>
+                <button class="bg-preset" data-bg="gradient3" style="width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);" onclick="window._setBg('gradient3')"></button>
+            </div>
+            <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem;">
+                <label>上传背景图片（仅支持 JPG/PNG/WebP，最大2MB）</label>
+                <input type="file" id="backgroundUpload" accept="image/*" /><br><br>
+                <button class="auth-btn" onclick="window._uploadBackground()">上传背景</button>
+                <button class="auth-btn secondary" onclick="window._resetBackground()" style="margin-top:0.5rem;">重置背景</button>
+            </div>
+            <button class="auth-btn secondary" id="cancelBgBtn" style="margin-top:0.5rem;">取消</button>
+        </div>
+    </div>
+
+    <!-- 图片预览模态框 -->
+    <div class="modal-overlay" id="previewModal">
+        <div class="modal-content" style="text-align:center; background:var(--card-bg);">
+            <span id="previewClose" style="position:absolute;right:1rem;top:1rem;cursor:pointer;font-size:1.5rem;color:var(--text);">&times;</span>
+            <img id="previewImage" style="max-width:100%;max-height:70vh;" />
+        </div>
+    </div>
+
+    <!-- 隐藏的文件选择框 -->
+    <input type="file" id="hiddenFileInput" style="display:none;" multiple onchange="window._handleFileSelect(this)">
 
 <script>
 (function () {
@@ -376,7 +375,7 @@ connect-src 'self'
         }
     }
 
-    // ================== API 通信（增强错误处理） ==================
+    // ================== API 通信 ==================
     async function apiCall(path, method='GET', body=null) {
         const token = TokenManager.getToken() || TokenManager.getPartialToken();
         const headers = { 'Content-Type':'application/json' };
@@ -495,7 +494,7 @@ connect-src 'self'
         return fo?.children?.find(c => c.id === subId);
     }
 
-    // ================== 核心删除（从 DOM 读取 ID） ==================
+    // ================== 核心删除（404/不存在时自动刷新） ==================
     async function moveToTrash(type, folderId, subId, fileName) {
         if (!isAdmin()) return showToast('只读账户无法删除');
         const params = { scope: currentScope, type, folderId, subId, fileName };
@@ -506,6 +505,7 @@ connect-src 'self'
         }
         try {
             await apiCall('/move-to-trash', 'POST', params);
+            // 成功则刷新数据
             await loadFS();
             if (currentSelection && currentSelection.folderId && currentSelection.subId) {
                 const subExists = findSubObj(currentSelection.folderId, currentSelection.subId);
@@ -515,10 +515,16 @@ connect-src 'self'
             showToast('已移入回收站');
         } catch (err) {
             console.error('[moveToTrash] 请求失败:', err);
-            showToast('删除失败: ' + (err.message || '未知错误'));
-            if (err.message.includes('冲突')) {
+            // 如果错误是“文件夹不存在”之类的404错误，自动刷新界面并提示
+            if (err.message.includes('不存在') || err.message.includes('404') || err.message.includes('未找到')) {
                 await loadFS();
-                renderTree();
+                showToast('该文件夹可能已被删除，界面已刷新');
+            } else {
+                showToast('删除失败: ' + (err.message || '未知错误'));
+                if (err.message.includes('冲突')) {
+                    await loadFS();
+                    renderTree();
+                }
             }
         }
     }
@@ -550,7 +556,7 @@ connect-src 'self'
         moveToTrash('sub', folderId, subId);
     }
 
-    // 从 DOM 元素删除文件（文件卡片）
+    // 从 DOM 元素删除文件
     function deleteFileFromDOM(cardElement, fileName) {
         if (!isAdmin()) return showToast('只读账户无法删除');
         const folderId = cardElement.dataset.folderId;
@@ -593,15 +599,12 @@ connect-src 'self'
             nameSpan.appendChild(nameText);
             const actions = document.createElement('div'); actions.className = 'folder-actions';
             if (isAdmin()) {
-                // 密码按钮
                 const keyBtn = document.createElement('button'); keyBtn.title = '密码';
                 keyBtn.innerHTML = '<i class="fas fa-key"></i>';
                 keyBtn.onclick = e => { e.stopPropagation(); setFolderPassword(folder.id); };
-                // 重命名按钮
                 const renameBtn = document.createElement('button'); renameBtn.title = '重命名';
                 renameBtn.innerHTML = '<i class="fas fa-edit"></i>';
                 renameBtn.onclick = e => { e.stopPropagation(); renameFolder(folder.id, folder.name); };
-                // 删除按钮：直接从 div 获取 ID
                 const delBtn = document.createElement('button'); delBtn.title = '删除';
                 delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
                 delBtn.onclick = e => { e.stopPropagation(); deleteFolderFromDOM(div); };
@@ -627,7 +630,6 @@ connect-src 'self'
                         const rb = document.createElement('button'); rb.innerHTML = '<i class="fas fa-edit"></i>';
                         rb.onclick = e => { e.stopPropagation(); renameSub(folder.id, child.id, child.name); };
                         const db = document.createElement('button'); db.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                        // 删除按钮从 cli 读取 ID
                         db.onclick = e => { e.stopPropagation(); deleteSubFromDOM(cli); };
                         sa.appendChild(rb); sa.appendChild(db);
                     }
@@ -744,7 +746,6 @@ connect-src 'self'
             else if (/\.(mp3|wav|flac|aac)$/i.test(fileName)) iconClass='fa-file-audio';
             else if (/\.pdf$/i.test(fileName) || isPDF) iconClass='fa-file-pdf';
             const card = document.createElement('div'); card.className='file-card';
-            // 在卡片上存储 folderId 和 subId 以便删除
             card.dataset.folderId = folderId;
             card.dataset.subId = subId;
             const fileKey = JSON.stringify({ folderId, subId, fileName });
