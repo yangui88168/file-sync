@@ -27,6 +27,7 @@ connect-src 'self'
 ">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
     <style>
+        /* 样式不变，与之前完全相同（此处省略以节省篇幅，请使用你已有的完整样式） */
         :root {
             --bg: #f0f2f5; --card-bg: #ffffff; --text: #1e293b; --text-secondary: #64748b;
             --border: #e2e8f0; --hover: #f1f5f9; --shadow: rgba(0,0,0,0.05);
@@ -494,11 +495,11 @@ connect-src 'self'
         return fo?.children?.find(c => c.id === subId);
     }
 
-    // ================== 核心：删除/移入回收站（加强日志） ==================
+    // ================== 核心删除（从 DOM 读取 ID） ==================
     async function moveToTrash(type, folderId, subId, fileName) {
         if (!isAdmin()) return showToast('只读账户无法删除');
         const params = { scope: currentScope, type, folderId, subId, fileName };
-        console.log('[moveToTrash] 即将发送参数：', params);
+        console.log('[moveToTrash] 参数：', params);
         if (!params.scope || !params.type || !params.folderId) {
             console.error('[moveToTrash] 参数错误，缺失字段', params);
             return showToast('删除失败：参数不完整，请刷新页面后重试');
@@ -522,16 +523,44 @@ connect-src 'self'
         }
     }
 
-    async function deleteFolder(folderId, name) {
+    // 从 DOM 元素删除文件夹
+    function deleteFolderFromDOM(divElement) {
         if (!isAdmin()) return showToast('只读账户无法删除');
+        const folderId = divElement.dataset.folderId;
+        const name = divElement.querySelector('span span')?.textContent || '文件夹';
+        if (!folderId) {
+            console.error('[deleteFolder] 无法获取 folderId');
+            return showToast('删除失败：无法获取文件夹ID，请刷新页面后重试');
+        }
         if (!confirm(`删除文件夹【${name}】及其所有内容？将移入回收站。`)) return;
-        await moveToTrash('folder', folderId);
+        moveToTrash('folder', folderId);
     }
 
-    async function deleteSub(folderId, subId, name) {
+    // 从 DOM 元素删除子分类
+    function deleteSubFromDOM(liElement) {
         if (!isAdmin()) return showToast('只读账户无法删除');
+        const folderId = liElement.dataset.folderId;
+        const subId = liElement.dataset.subId;
+        const name = liElement.querySelector('span span')?.textContent || '子分类';
+        if (!folderId || !subId) {
+            console.error('[deleteSub] 无法获取 ID', { folderId, subId });
+            return showToast('删除失败：无法获取ID，请刷新页面后重试');
+        }
         if (!confirm(`删除子分类【${name}】及其所有文件？将移入回收站。`)) return;
-        await moveToTrash('sub', folderId, subId);
+        moveToTrash('sub', folderId, subId);
+    }
+
+    // 从 DOM 元素删除文件（文件卡片）
+    function deleteFileFromDOM(cardElement, fileName) {
+        if (!isAdmin()) return showToast('只读账户无法删除');
+        const folderId = cardElement.dataset.folderId;
+        const subId = cardElement.dataset.subId;
+        if (!folderId || !subId) {
+            console.error('[deleteFile] 无法获取 ID', { folderId, subId });
+            return showToast('删除失败：无法获取位置信息，请刷新页面后重试');
+        }
+        if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
+        moveToTrash('file', folderId, subId, fileName);
     }
 
     // ================== 目录树渲染 ==================
@@ -564,13 +593,21 @@ connect-src 'self'
             nameSpan.appendChild(nameText);
             const actions = document.createElement('div'); actions.className = 'folder-actions';
             if (isAdmin()) {
-                [['fa-key','密码'],['fa-edit','重命名'],['fa-trash-alt','删除']].forEach(([ic,title],idx)=>{
-                    const btn = document.createElement('button'); btn.title = title;
-                    const iconEl = document.createElement('i'); iconEl.className = `fas ${ic}`;
-                    btn.appendChild(iconEl);
-                    btn.onclick = e => { e.stopPropagation(); idx===0 ? setFolderPassword(folder.id) : idx===1 ? renameFolder(folder.id, folder.name) : deleteFolder(folder.id, folder.name); };
-                    actions.appendChild(btn);
-                });
+                // 密码按钮
+                const keyBtn = document.createElement('button'); keyBtn.title = '密码';
+                keyBtn.innerHTML = '<i class="fas fa-key"></i>';
+                keyBtn.onclick = e => { e.stopPropagation(); setFolderPassword(folder.id); };
+                // 重命名按钮
+                const renameBtn = document.createElement('button'); renameBtn.title = '重命名';
+                renameBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                renameBtn.onclick = e => { e.stopPropagation(); renameFolder(folder.id, folder.name); };
+                // 删除按钮：直接从 div 获取 ID
+                const delBtn = document.createElement('button'); delBtn.title = '删除';
+                delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                delBtn.onclick = e => { e.stopPropagation(); deleteFolderFromDOM(div); };
+                actions.appendChild(keyBtn);
+                actions.appendChild(renameBtn);
+                actions.appendChild(delBtn);
             }
             div.appendChild(chevron); div.appendChild(nameSpan); div.appendChild(actions);
             const sub = document.createElement('ul'); sub.className = 'sub-tree';
@@ -590,7 +627,8 @@ connect-src 'self'
                         const rb = document.createElement('button'); rb.innerHTML = '<i class="fas fa-edit"></i>';
                         rb.onclick = e => { e.stopPropagation(); renameSub(folder.id, child.id, child.name); };
                         const db = document.createElement('button'); db.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                        db.onclick = e => { e.stopPropagation(); deleteSub(folder.id, child.id, child.name); };
+                        // 删除按钮从 cli 读取 ID
+                        db.onclick = e => { e.stopPropagation(); deleteSubFromDOM(cli); };
                         sa.appendChild(rb); sa.appendChild(db);
                     }
                     cli.appendChild(sn); cli.appendChild(sa);
@@ -706,6 +744,9 @@ connect-src 'self'
             else if (/\.(mp3|wav|flac|aac)$/i.test(fileName)) iconClass='fa-file-audio';
             else if (/\.pdf$/i.test(fileName) || isPDF) iconClass='fa-file-pdf';
             const card = document.createElement('div'); card.className='file-card';
+            // 在卡片上存储 folderId 和 subId 以便删除
+            card.dataset.folderId = folderId;
+            card.dataset.subId = subId;
             const fileKey = JSON.stringify({ folderId, subId, fileName });
             if (selectMode) { card.classList.add('selectable'); if (selectedFiles.has(fileKey)) card.classList.add('selected'); }
             const checkMark = document.createElement('div'); checkMark.className='check-mark'; checkMark.innerHTML='<i class="fas fa-check"></i>'; card.appendChild(checkMark);
@@ -713,9 +754,7 @@ connect-src 'self'
                 const delBtn = document.createElement('button'); delBtn.className='del-file'; delBtn.textContent='×';
                 delBtn.onclick = async e => {
                     e.stopPropagation();
-                    if (!confirm(`删除文件 ${fileName}？将移入回收站。`)) return;
-                    if (selectedFiles.has(fileKey)) selectedFiles.delete(fileKey);
-                    await moveToTrash('file', folderId, subId, fileName);
+                    deleteFileFromDOM(card, fileName);
                 };
                 card.appendChild(delBtn);
             }
