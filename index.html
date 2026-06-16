@@ -387,6 +387,9 @@ connect-src 'self'
         let userBg = localStorage.getItem('userBg') || '';
         let userBgImage = localStorage.getItem('userBgImage') || '';
 
+        // 新增：记录已解锁的文件夹ID
+        let unlockedFolders = new Set();
+
         function isAdmin() { return currentUser && currentUser.role !== 'readonly'; }
 
         function updateUIByRole() {
@@ -562,7 +565,8 @@ connect-src 'self'
                 const li = document.createElement('li');
                 const div = document.createElement('div'); div.className = 'folder-item';
                 div.dataset.folderId = folder.id;
-                const locked = folder.hasPassword && (!folder.children || folder.children.length === 0);
+                // 修改1：锁定状态现在仅由 hasPassword 和未解锁状态决定
+                const locked = folder.hasPassword && !unlockedFolders.has(folder.id);
                 const chevron = document.createElement('i'); chevron.className = 'fas fa-chevron-right'; chevron.style.cssText = 'margin-right:6px;font-size:0.75rem;';
                 const nameSpan = document.createElement('span'); nameSpan.style.flex = '1';
                 const icon = document.createElement('i');
@@ -576,7 +580,21 @@ connect-src 'self'
                 if (isAdmin()) {
                     const keyBtn = document.createElement('button'); keyBtn.title = '密码';
                     keyBtn.innerHTML = '<i class="fas fa-key"></i>';
-                    keyBtn.onclick = e => { e.stopPropagation(); setFolderPassword(folder.id); };
+                    // 修改3：如果已设置密码，需要验证当前密码才能修改
+                    keyBtn.onclick = async e => {
+                        e.stopPropagation();
+                        if (folder.hasPassword) {
+                            const pwd = prompt('请输入当前密码');
+                            if (pwd === null) return;
+                            try {
+                                await apiCall('/verify-folder-password', 'POST', { scope: currentScope, folderId: folder.id, password: pwd });
+                            } catch {
+                                showToast('密码错误');
+                                return;
+                            }
+                        }
+                        setFolderPassword(folder.id);
+                    };
                     const renameBtn = document.createElement('button'); renameBtn.title = '重命名';
                     renameBtn.innerHTML = '<i class="fas fa-edit"></i>';
                     renameBtn.onclick = e => { e.stopPropagation(); renameFolder(folder.id, folder.name); };
@@ -621,7 +639,10 @@ connect-src 'self'
                         const pwd = prompt(`请输入文件夹 "${folder.name}" 的密码：`); if (pwd === null) return;
                         try {
                             await apiCall('/verify-folder-password', 'POST', { scope: currentScope, folderId: folder.id, password: pwd });
-                            await loadFS();
+                            // 修改2：验证成功记录解锁状态，并直接展开子树
+                            unlockedFolders.add(folder.id);
+                            sub.classList.add('show');
+                            chevron.classList.add('fa-rotate-90');
                         } catch { showToast('密码错误'); }
                     } else { sub.classList.toggle('show'); chevron.classList.toggle('fa-rotate-90'); }
                 };
@@ -642,6 +663,8 @@ connect-src 'self'
         async function setFolderPassword(folderId) {
             const newPwd = prompt(`设置密码（留空=清除）：`); if (newPwd === null) return;
             await apiCall('/set-folder-password', 'POST', { scope: currentScope, folderId, password: newPwd || '' });
+            // 密码变更后清除当前文件夹的解锁状态
+            unlockedFolders.delete(folderId);
             await loadFS();
             showToast(newPwd ? '密码已设置！' : '密码已清除！');
         }
@@ -988,7 +1011,16 @@ connect-src 'self'
         window._refresh = function() { loadFS(); };
         window._toggleTrash = function() { const p = document.getElementById('trashPanel'); p.classList.toggle('hidden'); if (!p.classList.contains('hidden')) renderTrash(); };
         window._exportStructure = function() { const c = getCurrentFS(); const blob = new Blob([JSON.stringify({ scope: currentScope, folders: c.folders, trash: c.trash }, null, 2)], { type:'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `structure-${currentScope}-${new Date().toISOString().slice(0,10)}.json`; a.click(); };
-        window._switchScope = function(scope) { if (scope === currentScope) return; currentScope = scope; document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active')); document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active'); currentSelection = null; if (selectMode) toggleSelectMode(false); loadFS().then(() => { document.getElementById('fileView').innerHTML = ''; document.getElementById('trashPanel').classList.add('hidden'); }); };
+        window._switchScope = function(scope) {
+            if (scope === currentScope) return;
+            currentScope = scope;
+            unlockedFolders.clear(); // 切换范围时清空解锁状态
+            document.querySelectorAll('.scope-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.scope-tab[data-scope="${scope}"]`).classList.add('active');
+            currentSelection = null;
+            if (selectMode) toggleSelectMode(false);
+            loadFS().then(() => { document.getElementById('fileView').innerHTML = ''; document.getElementById('trashPanel').classList.add('hidden'); });
+        };
         window._addFolder = async function() { if (!isAdmin()) return showToast('只读账户无法创建'); const name = prompt('新文件夹名称：'); if (!name||!validName(name)) return showToast('名称无效'); const c = getCurrentFS(); c.folders.push({ id: crypto.randomUUID(), name, passwordHash:'', passwordSalt:'', children:[] }); renderTree(); try { await saveFS(); } catch(e) { showToast(e.message); } };
         window._emptyTrash = async function() { if (!isAdmin()) return showToast('只读账户无法清空'); if (!confirm('清空回收站将永久删除所有项目，确定？')) return; await apiCall('/empty-trash', 'POST', { scope: currentScope }); await loadFS(); };
         window._copyInviteCode = function() { const code = document.getElementById('myInviteCode').value; if (code) navigator.clipboard.writeText(code).then(() => showToast('邀请码已复制')); };
